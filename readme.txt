@@ -1,0 +1,58 @@
+=== xZeroProtect ===
+Contributors: webrium
+Tags: firewall, security, bot-protection, analytics, waf
+Requires at least: 6.0
+Tested up to: 6.7
+Requires PHP: 8.0
+Stable tag: 1.0.0
+License: MIT
+
+Lightweight firewall for WordPress — blocks bots and scanners, tracks real visitor analytics with zero external dependencies.
+
+== Description ==
+
+xZeroProtect brings the power of the [xZeroProtect PHP library](https://github.com/webrium/xzeroprotect) to WordPress with a clean admin dashboard.
+
+**What it does:**
+
+* Blocks bots, scanners, and common web attacks (SQLi, XSS, path traversal, command injection)
+* Rate-limits IPs and automatically bans repeat offenders
+* Verifies legitimate crawlers (Googlebot, Bingbot) via double-DNS — they're never blocked
+* Tracks **real** visitor analytics — bot traffic is already filtered out before anything is recorded
+* Shows unique visitors, top pages, device breakdown, and block reasons in a dashboard
+* Zero external dependencies — no Redis, no external API, everything on disk and in your database
+
+**Dashboard includes:**
+
+* Traffic overview chart (visits, unique visitors, blocked)
+* Top pages by hits and unique visitors
+* Device breakdown (desktop / mobile / tablet)
+* Block reason breakdown
+* Real visitor log with browser, OS, and device info
+* Blocked request log with attack type and reason
+
+== Installation ==
+
+1. Upload the `xzeroprotect-wp` folder to `/wp-content/plugins/`
+2. Run `composer install` inside the plugin directory
+3. Activate the plugin in **Plugins → Installed Plugins**
+4. Go to **xZeroProtect → Settings** to configure
+
+== Frequently Asked Questions ==
+
+= Will this block me from my own admin? =
+
+No. The plugin automatically whitelists `/wp-admin`, `/wp-login.php`, and other WordPress core paths. Logged-in administrators are also exempt.
+
+= Does it work on shared hosting? =
+
+Yes — that's one of its main advantages. No Redis, no system-level access, no external services required.
+
+= What happens to my data if I deactivate the plugin? =
+
+Data is kept on deactivation. It is only removed when you **delete** the plugin (uninstall).
+
+== Changelog ==
+
+= 1.0.0 =
+* Initial release
