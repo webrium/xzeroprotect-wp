@@ -104,17 +104,6 @@
         $(this).closest('.xzp-mode-card').addClass('active');
     });
 
-    // ── Load Chart.js from CDN if not already present ─────────────────────────
-
-    if (chartCanvas && typeof Chart === 'undefined') {
-        var script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
-        script.onload = function () {
-            if (typeof window.xzpChartData !== 'undefined') {
-                renderChart(window.xzpChartData);
-            }
-        };
-        document.head.appendChild(script);
-    }
+    // Chart.js is enqueued locally via wp_enqueue_script — no CDN fallback needed
 
 }(jQuery));

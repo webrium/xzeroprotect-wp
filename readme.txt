@@ -2,16 +2,17 @@
 Contributors: webrium
 Tags: firewall, security, bot-protection, analytics, waf
 Requires at least: 6.0
-Tested up to: 6.7
+Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.0.0
-License: MIT
+Stable tag: 1.1.1
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 Lightweight firewall for WordPress — blocks bots and scanners, tracks real visitor analytics with zero external dependencies.
 
 == Description ==
 
-xZeroProtect brings the power of the [xZeroProtect PHP library](https://github.com/webrium/xzeroprotect) to WordPress with a clean admin dashboard.
+xZeroProtect brings the power of the [xZeroProtect PHP library](https://github.com/webrium/xzeroprotect) to WordPress with a clean admin dashboard. The plugin source is available at [github.com/webrium/xzeroprotect-wp](https://github.com/webrium/xzeroprotect-wp).
 
 **What it does:**
 
@@ -52,7 +53,23 @@ Yes — that's one of its main advantages. No Redis, no system-level access, no 
 
 Data is kept on deactivation. It is only removed when you **delete** the plugin (uninstall).
 
+== Privacy Policy ==
+
+xZeroProtect stores visitor data (IP address, browser, OS, device type) and blocked
+request data locally in your WordPress database. No data is transmitted to external
+servers. All stored data is automatically deleted after the configured retention period
+(default: 30 days). All data is permanently removed when the plugin is uninstalled.
+
 == Changelog ==
+
+= 1.1.1 =
+* Added real visitor tracking with device and browser detection
+* Added unique visitor fingerprinting (daily-resetting SHA-256)
+* Added analytics dashboard: traffic chart, top pages, device breakdown, block reasons
+* Added real visitor log and blocked request log
+* Removed curl, wget, python-requests, go-http-client from default blocked agents
+* Removed .php extension from default blocked paths to avoid false positives
+* Raised auto-ban violations threshold from 5 to 10
 
 = 1.0.0 =
 * Initial release

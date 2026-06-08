@@ -46,9 +46,9 @@ class XZP_Firewall
             $firewall->run();
 
         } catch (\Throwable $e) {
-            // Never crash WordPress — log silently
+            // Never crash WordPress — log silently in debug mode only
             if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('[xZeroProtect] ' . $e->getMessage());
+                error_log('[xZeroProtect] ' . $e->getMessage()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             }
         }
     }
@@ -151,7 +151,8 @@ class XZP_Firewall
 
     private static function getClientIp(): string
     {
-        return $_SERVER['REMOTE_ADDR'] ?? '';
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash
+        return isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '';
     }
 
     // ── Scheduled cleanup ─────────────────────────────────────────────────────

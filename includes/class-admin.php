@@ -23,33 +23,33 @@ class XZP_Admin
     public function registerMenus(): void
     {
         add_menu_page(
-            __('xZeroProtect', 'xzeroprotect'),
-            __('xZeroProtect', 'xzeroprotect'),
+            __('xZeroProtect', 'xzeroprotect-wp'),
+            __('xZeroProtect', 'xzeroprotect-wp'),
             'manage_options',
-            'xzeroprotect',
+            'xzeroprotect-wp',
             [$this, 'renderDashboard'],
             'dashicons-shield',
             80
         );
 
-        add_submenu_page('xzeroprotect',
-            __('Dashboard', 'xzeroprotect'),
-            __('Dashboard', 'xzeroprotect'),
-            'manage_options', 'xzeroprotect', [$this, 'renderDashboard']);
+        add_submenu_page('xzeroprotect-wp',
+            __('Dashboard', 'xzeroprotect-wp'),
+            __('Dashboard', 'xzeroprotect-wp'),
+            'manage_options', 'xzeroprotect-wp', [$this, 'renderDashboard']);
 
-        add_submenu_page('xzeroprotect',
-            __('Visitors', 'xzeroprotect'),
-            __('Real Visitors', 'xzeroprotect'),
+        add_submenu_page('xzeroprotect-wp',
+            __('Visitors', 'xzeroprotect-wp'),
+            __('Real Visitors', 'xzeroprotect-wp'),
             'manage_options', 'xzp-visitors', [$this, 'renderVisitors']);
 
-        add_submenu_page('xzeroprotect',
-            __('Blocked', 'xzeroprotect'),
-            __('Blocked Requests', 'xzeroprotect'),
+        add_submenu_page('xzeroprotect-wp',
+            __('Blocked', 'xzeroprotect-wp'),
+            __('Blocked Requests', 'xzeroprotect-wp'),
             'manage_options', 'xzp-blocked', [$this, 'renderBlocked']);
 
-        add_submenu_page('xzeroprotect',
-            __('Settings', 'xzeroprotect'),
-            __('Settings', 'xzeroprotect'),
+        add_submenu_page('xzeroprotect-wp',
+            __('Settings', 'xzeroprotect-wp'),
+            __('Settings', 'xzeroprotect-wp'),
             'manage_options', 'xzp-settings', [$this, 'renderSettings']);
     }
 
@@ -57,8 +57,10 @@ class XZP_Admin
 
     public function enqueueAssets(string $hook): void
     {
+        // WordPress hook suffix = sanitize_title(menu_title) + '_page_' + page_slug
+        // sanitize_title('xZeroProtect') → 'xzeroprotect'  (NOT the menu slug)
         $xzp_pages = [
-            'toplevel_page_xzeroprotect',
+            'toplevel_page_xzeroprotect-wp',
             'xzeroprotect_page_xzp-visitors',
             'xzeroprotect_page_xzp-blocked',
             'xzeroprotect_page_xzp-settings',
@@ -75,10 +77,19 @@ class XZP_Admin
             XZPWP_VERSION
         );
 
+        // Chart.js — loaded locally (WordPress.org guideline #8: no external CDNs)
+        wp_enqueue_script(
+            'xzp-chartjs',
+            XZPWP_URL . 'assets/js/chart.umd.min.js',
+            [],
+            '4.4.1',
+            true
+        );
+
         wp_enqueue_script(
             'xzp-admin',
             XZPWP_URL . 'assets/js/admin.js',
-            ['jquery'],
+            ['jquery', 'xzp-chartjs'],
             XZPWP_VERSION,
             true
         );
@@ -87,9 +98,9 @@ class XZP_Admin
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce'   => wp_create_nonce('xzp_ajax'),
             'i18n'    => [
-                'visits'  => __('Visits', 'xzeroprotect'),
-                'unique'  => __('Unique', 'xzeroprotect'),
-                'blocked' => __('Blocked', 'xzeroprotect'),
+                'visits'  => __('Visits', 'xzeroprotect-wp'),
+                'unique'  => __('Unique', 'xzeroprotect-wp'),
+                'blocked' => __('Blocked', 'xzeroprotect-wp'),
             ],
         ]);
     }
@@ -137,7 +148,7 @@ class XZP_Admin
         if (!current_user_can('manage_options')) wp_die();
         check_admin_referer('xzp_save_settings');
         XZP_Settings::save($_POST);
-        wp_redirect(add_query_arg(['page' => 'xzp-settings', 'saved' => '1'], admin_url('admin.php')));
+        wp_safe_redirect(add_query_arg(['page' => 'xzp-settings', 'saved' => '1'], admin_url('admin.php')));
         exit;
     }
 
@@ -145,16 +156,16 @@ class XZP_Admin
     {
         if (!current_user_can('manage_options')) wp_die();
         check_admin_referer('xzp_clear_data');
-        $type = sanitize_text_field($_POST['clear_type'] ?? 'all');
+        $type = sanitize_text_field(wp_unslash($_POST['clear_type'] ?? 'all'));
 
         global $wpdb;
-        if (in_array($type, ['visits', 'all'])) {
-            $wpdb->query("TRUNCATE TABLE {$wpdb->prefix}xzp_visits");
+        if (in_array($type, ['visits', 'all'], true)) {
+            $wpdb->query("TRUNCATE TABLE {$wpdb->prefix}xzp_visits"); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
         }
-        if (in_array($type, ['blocks', 'all'])) {
-            $wpdb->query("TRUNCATE TABLE {$wpdb->prefix}xzp_blocks");
+        if (in_array($type, ['blocks', 'all'], true)) {
+            $wpdb->query("TRUNCATE TABLE {$wpdb->prefix}xzp_blocks"); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
         }
-        wp_redirect(add_query_arg(['page' => 'xzp-settings', 'cleared' => '1'], admin_url('admin.php')));
+        wp_safe_redirect(add_query_arg(['page' => 'xzp-settings', 'cleared' => '1'], admin_url('admin.php')));
         exit;
     }
 
@@ -164,7 +175,7 @@ class XZP_Admin
     {
         check_ajax_referer('xzp_ajax', 'nonce');
         if (!current_user_can('manage_options')) wp_die();
-        $days  = (int) ($_POST['days'] ?? 14);
+        $days  = (int) wp_unslash($_POST['days'] ?? 14);
         $chart = XZP_Database::getVisitsChart(max(7, min(90, $days)));
         wp_send_json_success($chart);
     }
@@ -173,7 +184,7 @@ class XZP_Admin
     {
         check_ajax_referer('xzp_ajax', 'nonce');
         if (!current_user_can('manage_options')) wp_die();
-        $days  = (int) ($_POST['days'] ?? 30);
+        $days  = (int) wp_unslash($_POST['days'] ?? 30);
         $stats = XZP_Database::getVisitStats(max(1, min(365, $days)));
         wp_send_json_success($stats);
     }

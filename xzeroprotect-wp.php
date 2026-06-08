@@ -1,15 +1,16 @@
 <?php
 /**
  * Plugin Name:       xZeroProtect
- * Plugin URI:        https://github.com/webrium/xzeroprotect
+ * Plugin URI:        https://github.com/webrium/xzeroprotect-wp
  * Description:       Lightweight firewall for WordPress — blocks bots, scanners, and common attacks with zero external dependencies. Tracks real visitor analytics filtered from bot traffic.
- * Version:           1.0.0
+ * Version:           1.1.1
  * Requires at least: 6.0
  * Requires PHP:      8.0
  * Author:            Webrium
  * Author URI:        https://github.com/webrium
- * License:           MIT
- * Text Domain:       xzeroprotect
+ * License:           GPLv2 or later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain:       xzeroprotect-wp
  * Domain Path:       /languages
  */
 
@@ -17,11 +18,11 @@ declare(strict_types=1);
 
 defined('ABSPATH') || exit;
 
-define('XZPWP_VERSION',   '1.0.0');
+define('XZPWP_VERSION',   '1.1.1');
 define('XZPWP_FILE',      __FILE__);
 define('XZPWP_DIR',       plugin_dir_path(__FILE__));
 define('XZPWP_URL',       plugin_dir_url(__FILE__));
-define('XZPWP_SLUG',      'xzeroprotect');
+define('XZPWP_SLUG',      'xzeroprotect-wp');
 define('XZPWP_DB_TABLE',  'xzp_visits');
 
 // ── Autoload ──────────────────────────────────────────────────────────────────
@@ -31,8 +32,8 @@ if (file_exists($composer)) {
     require_once $composer;
 } else {
     wp_die(
-        __('xZeroProtect requires Composer dependencies. Please run <code>composer install</code> inside the plugin directory.', 'xzeroprotect'),
-        __('xZeroProtect — Missing Dependencies', 'xzeroprotect')
+        wp_kses( __('xZeroProtect requires Composer dependencies. Please run <code>composer install</code> inside the plugin directory.', 'xzeroprotect-wp'), ['code' => []] ),
+        esc_html__('xZeroProtect — Missing Dependencies', 'xzeroprotect-wp')
     );
 }
 
@@ -48,7 +49,7 @@ register_deactivation_hook(__FILE__, ['XZP_Database', 'deactivate']);
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 add_action('plugins_loaded', function () {
-    load_plugin_textdomain('xzeroprotect', false, dirname(plugin_basename(__FILE__)) . '/languages');
+    load_plugin_textdomain('xzeroprotect-wp', false, dirname(plugin_basename(__FILE__)) . '/languages');
 });
 
 // Firewall runs as early as possible — before WordPress processes the request

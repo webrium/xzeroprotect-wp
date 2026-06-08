@@ -131,7 +131,7 @@ class XZP_Database
         global $wpdb;
         $visits = $wpdb->prefix . 'xzp_visits';
         $blocks = $wpdb->prefix . 'xzp_blocks';
-        $since  = date('Y-m-d H:i:s', strtotime("-{$days} days"));
+        $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
 
         return [
             'total_visits'   => (int) $wpdb->get_var($wpdb->prepare(
@@ -144,13 +144,13 @@ class XZP_Database
                 "SELECT COUNT(*) FROM {$blocks} WHERE blocked_at >= %s", $since)),
 
             'blocked_today'  => (int) $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(*) FROM {$blocks} WHERE blocked_at >= %s", date('Y-m-d 00:00:00'))),
+                "SELECT COUNT(*) FROM {$blocks} WHERE blocked_at >= %s", gmdate('Y-m-d 00:00:00'))),
 
             'visits_today'   => (int) $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(*) FROM {$visits} WHERE visited_at >= %s", date('Y-m-d 00:00:00'))),
+                "SELECT COUNT(*) FROM {$visits} WHERE visited_at >= %s", gmdate('Y-m-d 00:00:00'))),
 
             'unique_today'   => (int) $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(DISTINCT fingerprint) FROM {$visits} WHERE visited_at >= %s", date('Y-m-d 00:00:00'))),
+                "SELECT COUNT(DISTINCT fingerprint) FROM {$visits} WHERE visited_at >= %s", gmdate('Y-m-d 00:00:00'))),
         ];
     }
 
@@ -159,7 +159,7 @@ class XZP_Database
         global $wpdb;
         $visits = $wpdb->prefix . 'xzp_visits';
         $blocks = $wpdb->prefix . 'xzp_blocks';
-        $since  = date('Y-m-d', strtotime("-{$days} days"));
+        $since  = gmdate('Y-m-d', strtotime("-{$days} days"));
 
         $visitRows = $wpdb->get_results($wpdb->prepare(
             "SELECT DATE(visited_at) as day, COUNT(*) as total, COUNT(DISTINCT fingerprint) as unique_v
@@ -176,7 +176,7 @@ class XZP_Database
         // Merge into a single indexed structure
         $chart = [];
         for ($i = $days - 1; $i >= 0; $i--) {
-            $chart[date('Y-m-d', strtotime("-{$i} days"))] = ['visits' => 0, 'unique' => 0, 'blocks' => 0];
+            $chart[gmdate('Y-m-d', strtotime("-{$i} days"))] = ['visits' => 0, 'unique' => 0, 'blocks' => 0];
         }
         foreach ($visitRows as $r) {
             if (isset($chart[$r['day']])) {
@@ -196,8 +196,8 @@ class XZP_Database
     {
         global $wpdb;
         $visits = $wpdb->prefix . 'xzp_visits';
-        $since  = date('Y-m-d H:i:s', strtotime("-{$days} days"));
-        return $wpdb->get_results($wpdb->prepare(
+        $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
+        return $wpdb->get_results($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
             "SELECT path, COUNT(*) as hits, COUNT(DISTINCT fingerprint) as unique_v
              FROM {$visits} WHERE visited_at >= %s
              GROUP BY path ORDER BY hits DESC LIMIT %d",
@@ -209,8 +209,8 @@ class XZP_Database
     {
         global $wpdb;
         $blocks = $wpdb->prefix . 'xzp_blocks';
-        $since  = date('Y-m-d H:i:s', strtotime("-{$days} days"));
-        return $wpdb->get_results($wpdb->prepare(
+        $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
+        return $wpdb->get_results($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
             "SELECT block_type, COUNT(*) as total
              FROM {$blocks} WHERE blocked_at >= %s
              GROUP BY block_type ORDER BY total DESC LIMIT 10",
@@ -222,8 +222,8 @@ class XZP_Database
     {
         global $wpdb;
         $visits = $wpdb->prefix . 'xzp_visits';
-        $since  = date('Y-m-d H:i:s', strtotime("-{$days} days"));
-        return $wpdb->get_results($wpdb->prepare(
+        $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
+        return $wpdb->get_results($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
             "SELECT device_type, COUNT(*) as total
              FROM {$visits} WHERE visited_at >= %s
              GROUP BY device_type",
@@ -235,7 +235,7 @@ class XZP_Database
     {
         global $wpdb;
         $blocks = $wpdb->prefix . 'xzp_blocks';
-        return $wpdb->get_results($wpdb->prepare(
+        return $wpdb->get_results($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
             "SELECT * FROM {$blocks} ORDER BY blocked_at DESC LIMIT %d", $limit
         ), ARRAY_A) ?: [];
     }
@@ -244,7 +244,7 @@ class XZP_Database
     {
         global $wpdb;
         $visits = $wpdb->prefix . 'xzp_visits';
-        return $wpdb->get_results($wpdb->prepare(
+        return $wpdb->get_results($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
             "SELECT * FROM {$visits} ORDER BY visited_at DESC LIMIT %d", $limit
         ), ARRAY_A) ?: [];
     }
@@ -252,10 +252,10 @@ class XZP_Database
     public static function pruneOldData(int $keepDays): void
     {
         global $wpdb;
-        $cutoff = date('Y-m-d H:i:s', strtotime("-{$keepDays} days"));
+        $cutoff = gmdate('Y-m-d H:i:s', strtotime("-{$keepDays} days"));
         $wpdb->query($wpdb->prepare(
-            "DELETE FROM {$wpdb->prefix}xzp_visits WHERE visited_at < %s", $cutoff));
+            "DELETE FROM {$wpdb->prefix}xzp_visits WHERE visited_at < %s", $cutoff)); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         $wpdb->query($wpdb->prepare(
-            "DELETE FROM {$wpdb->prefix}xzp_blocks WHERE blocked_at < %s", $cutoff));
+            "DELETE FROM {$wpdb->prefix}xzp_blocks WHERE blocked_at < %s", $cutoff)); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
 }

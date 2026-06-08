@@ -74,6 +74,7 @@
 .xzp-card--red    { border-top-color: var(--xzp-red); }
 .xzp-card--orange { border-top-color: var(--xzp-orange); }
 .xzp-card__icon   { font-size: 24px; line-height: 1; margin-top: 2px; }
+.xzp-card__body   { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .xzp-card__value  { font-size: 28px; font-weight: 800; line-height: 1; color: var(--xzp-primary); }
 .xzp-card__label  { font-size: 12px; color: var(--xzp-muted); margin-top: 4px; }
 .xzp-card__sub    { font-size: 11px; color: var(--xzp-accent); margin-top: 2px; }
