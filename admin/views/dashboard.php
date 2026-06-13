@@ -85,11 +85,6 @@
         <div class="xzp-panel__body">
             <canvas id="xzp-chart" height="80"></canvas>
         </div>
-        <script>
-        window.xzpChartData = <?php echo wp_json_encode(array_values(array_map(function($day, $data) {
-            return ['date' => $day, 'visits' => $data['visits'], 'unique' => $data['unique'], 'blocks' => $data['blocks']];
-        }, array_keys($chart), $chart))); ?>;
-        </script>
     </div>
 
     <div class="xzp-row">

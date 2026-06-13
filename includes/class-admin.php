@@ -82,7 +82,7 @@ class XZP_Admin
             'xzp-chartjs',
             XZPWP_URL . 'assets/js/chart.umd.min.js',
             [],
-            '4.4.1',
+            '4.5.1',
             true
         );
 
@@ -103,6 +103,25 @@ class XZP_Admin
                 'blocked' => __('Blocked', 'xzeroprotect-wp'),
             ],
         ]);
+
+        // Initial chart data for the dashboard page (avoids inline <script> tags).
+        if ($hook === 'toplevel_page_xzeroprotect-wp') {
+            $xzp_chart = XZP_Database::getVisitsChart(14);
+            $xzp_chart_data = array_values(array_map(function ($day, $data) {
+                return [
+                    'date'   => $day,
+                    'visits' => $data['visits'],
+                    'unique' => $data['unique'],
+                    'blocks' => $data['blocks'],
+                ];
+            }, array_keys($xzp_chart), $xzp_chart));
+
+            wp_add_inline_script(
+                'xzp-admin',
+                'window.xzpChartData = ' . wp_json_encode($xzp_chart_data) . ';',
+                'before'
+            );
+        }
     }
 
     // ── Page renderers ────────────────────────────────────────────────────────
@@ -111,7 +130,6 @@ class XZP_Admin
     {
         if (!current_user_can('manage_options')) wp_die();
         $stats = XZP_Database::getVisitStats(30);
-        $chart = XZP_Database::getVisitsChart(14);
         $pages = XZP_Database::getTopPages(8, 30);
         $types = XZP_Database::getTopBlockTypes(30);
         $devs  = XZP_Database::getDeviceBreakdown(30);

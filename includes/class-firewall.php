@@ -55,11 +55,37 @@ class XZP_Firewall
 
     // ── Config builder ────────────────────────────────────────────────────────
 
+    /**
+     * Returns (and ensures) the directory where the firewall stores its
+     * runtime data, inside the WordPress uploads directory.
+     */
+    private static function getStoragePath(): string
+    {
+        $upload_dir = wp_upload_dir();
+        $path = trailingslashit($upload_dir['basedir']) . 'xzeroprotect-wp';
+
+        if (!file_exists($path)) {
+            wp_mkdir_p($path);
+        }
+
+        // Prevent directory listing / direct access of stored data.
+        $htaccess = $path . '/.htaccess';
+        if (!file_exists($htaccess)) {
+            @file_put_contents($htaccess, "Deny from all\n");
+        }
+        $index = $path . '/index.php';
+        if (!file_exists($index)) {
+            @file_put_contents($index, "<?php\n// Silence is golden.\n");
+        }
+
+        return $path;
+    }
+
     private static function buildConfig(array $s): array
     {
         return [
             'mode'         => $s['mode'],
-            'storage_path' => WP_CONTENT_DIR . '/xzp-storage',
+            'storage_path' => self::getStoragePath(),
 
             'rate_limit' => [
                 'enabled'      => $s['rate_limit_enabled'],

@@ -1,10 +1,10 @@
 === xZeroProtect ===
-Contributors: webrium
+Contributors: webrium, benkhalifedev
 Tags: firewall, security, bot-protection, analytics, waf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.1.1
+Stable tag: 1.1.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -61,6 +61,13 @@ servers. All stored data is automatically deleted after the configured retention
 (default: 30 days). All data is permanently removed when the plugin is uninstalled.
 
 == Changelog ==
+
+= 1.1.2 =
+* Updated bundled Chart.js to v4.5.1
+* Moved firewall storage to the WordPress uploads directory (wp_upload_dir())
+* Replaced inline dashboard <script> with wp_add_inline_script
+* Removed unnecessary load_plugin_textdomain() call (handled by WordPress.org since 4.6)
+* Removed directory asset files from the plugin package
 
 = 1.1.1 =
 * Added real visitor tracking with device and browser detection

@@ -3,7 +3,7 @@
  * Plugin Name:       xZeroProtect
  * Plugin URI:        https://github.com/webrium/xzeroprotect-wp
  * Description:       Lightweight firewall for WordPress — blocks bots, scanners, and common attacks with zero external dependencies. Tracks real visitor analytics filtered from bot traffic.
- * Version:           1.1.1
+ * Version:           1.1.2
  * Requires at least: 6.0
  * Requires PHP:      8.0
  * Author:            Webrium
@@ -18,7 +18,7 @@ declare(strict_types=1);
 
 defined("ABSPATH") || exit();
 
-define("XZPWP_VERSION", "1.1.1");
+define("XZPWP_VERSION", "1.1.2");
 define("XZPWP_FILE", __FILE__);
 define("XZPWP_DIR", plugin_dir_path(__FILE__));
 define("XZPWP_URL", plugin_dir_url(__FILE__));
@@ -54,13 +54,6 @@ register_activation_hook(__FILE__, ["XZP_Database", "install"]);
 register_deactivation_hook(__FILE__, ["XZP_Database", "deactivate"]);
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-add_action("plugins_loaded", function () {
-    load_plugin_textdomain(
-        "xzeroprotect",
-        false,
-        dirname(plugin_basename(__FILE__)) . "/languages",
-    );
-});
 
 // Firewall runs as early as possible — before WordPress processes the request
 add_action("init", ["XZP_Firewall", "run"], 1);
