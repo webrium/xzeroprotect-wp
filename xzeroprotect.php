@@ -3,7 +3,7 @@
  * Plugin Name:       xZeroProtect
  * Plugin URI:        https://github.com/webrium/xzeroprotect-wp
  * Description:       Lightweight firewall for WordPress — blocks bots, scanners, and common attacks with zero external dependencies. Tracks real visitor analytics filtered from bot traffic.
- * Version:           1.1.2
+ * Version:           1.1.3
  * Requires at least: 6.0
  * Requires PHP:      8.0
  * Author:            Webrium
@@ -11,43 +11,42 @@
  * License:           GPLv2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       xzeroprotect
- * Domain Path:       /languages
  */
 
 declare(strict_types=1);
 
 defined("ABSPATH") || exit();
 
-define("XZPWP_VERSION", "1.1.2");
-define("XZPWP_FILE", __FILE__);
-define("XZPWP_DIR", plugin_dir_path(__FILE__));
-define("XZPWP_URL", plugin_dir_url(__FILE__));
-define("XZPWP_SLUG", "xzeroprotect-wp");
-define("XZPWP_DB_TABLE", "xzp_visits");
+define("XZP_VERSION", "1.1.3");
+define("XZP_FILE", __FILE__);
+define("XZP_DIR", plugin_dir_path(__FILE__));
+define("XZP_URL", plugin_dir_url(__FILE__));
+define("XZP_SLUG", "xzeroprotect");
+define("XZP_DB_TABLE", "xzp_visits");
 
 // ── Autoload ──────────────────────────────────────────────────────────────────
 // Try Composer autoloader first (dev/manual install), then bundled fallback
-$composer = XZPWP_DIR . "vendor/autoload.php";
-if (file_exists($composer)) {
-    require_once $composer;
+$xzp_composer = XZP_DIR . "vendor/autoload.php";
+if (file_exists($xzp_composer)) {
+    require_once $xzp_composer;
 } else {
     wp_die(
         wp_kses(
             __(
                 "xZeroProtect requires Composer dependencies. Please run <code>composer install</code> inside the plugin directory.",
-                "xzeroprotect-wp",
+                "xzeroprotect",
             ),
             ["code" => []],
         ),
-        esc_html__("xZeroProtect — Missing Dependencies", "xzeroprotect-wp"),
+        esc_html__("xZeroProtect — Missing Dependencies", "xzeroprotect"),
     );
 }
 
 // ── Core includes ─────────────────────────────────────────────────────────────
-require_once XZPWP_DIR . "includes/class-database.php";
-require_once XZPWP_DIR . "includes/class-firewall.php";
-require_once XZPWP_DIR . "includes/class-settings.php";
-require_once XZPWP_DIR . "includes/class-admin.php";
+require_once XZP_DIR . "includes/class-database.php";
+require_once XZP_DIR . "includes/class-firewall.php";
+require_once XZP_DIR . "includes/class-settings.php";
+require_once XZP_DIR . "includes/class-admin.php";
 
 // ── Activation / Deactivation ─────────────────────────────────────────────────
 register_activation_hook(__FILE__, ["XZP_Database", "install"]);

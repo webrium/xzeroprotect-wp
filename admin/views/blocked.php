@@ -1,11 +1,11 @@
 <?php defined('ABSPATH') || exit;
 $xzp_type_labels = [
-    'rate_limit'   => __('Rate Limit', 'xzeroprotect-wp'),
-    'banned_ip'    => __('Banned IP', 'xzeroprotect-wp'),
-    'blocked_path' => __('Blocked Path', 'xzeroprotect-wp'),
-    'user_agent'   => __('Bad User-Agent', 'xzeroprotect-wp'),
-    'payload'      => __('Payload Attack', 'xzeroprotect-wp'),
-    'custom_rule'  => __('Custom Rule', 'xzeroprotect-wp'),
+    'rate_limit'   => __('Rate Limit', 'xzeroprotect'),
+    'banned_ip'    => __('Banned IP', 'xzeroprotect'),
+    'blocked_path' => __('Blocked Path', 'xzeroprotect'),
+    'user_agent'   => __('Bad User-Agent', 'xzeroprotect'),
+    'payload'      => __('Payload Attack', 'xzeroprotect'),
+    'custom_rule'  => __('Custom Rule', 'xzeroprotect'),
 ];
 ?>
 <div class="xzp-wrap">
@@ -14,8 +14,8 @@ $xzp_type_labels = [
         <div class="xzp-header__left">
             <span class="xzp-logo">🚫</span>
             <div>
-                <h1><?php esc_html_e('Blocked Requests', 'xzeroprotect-wp'); ?></h1>
-                <p><?php esc_html_e('Bots, scanners, and attack attempts intercepted by the firewall', 'xzeroprotect-wp'); ?></p>
+                <h1><?php esc_html_e('Blocked Requests', 'xzeroprotect'); ?></h1>
+                <p><?php esc_html_e('Bots, scanners, and attack attempts intercepted by the firewall', 'xzeroprotect'); ?></p>
             </div>
         </div>
     </div>
@@ -23,16 +23,16 @@ $xzp_type_labels = [
     <div class="xzp-panel">
         <div class="xzp-panel__body xzp-panel__body--flush">
             <?php if (empty($blocks)): ?>
-                <p class="xzp-empty"><?php esc_html_e("No blocked requests yet. That's a good sign!", 'xzeroprotect-wp'); ?></p>
+                <p class="xzp-empty"><?php esc_html_e("No blocked requests yet. That's a good sign!", 'xzeroprotect'); ?></p>
             <?php else: ?>
             <table class="xzp-table xzp-table--full">
                 <thead><tr>
-                    <th><?php esc_html_e('Time', 'xzeroprotect-wp'); ?></th>
-                    <th><?php esc_html_e('IP', 'xzeroprotect-wp'); ?></th>
-                    <th><?php esc_html_e('URI', 'xzeroprotect-wp'); ?></th>
-                    <th><?php esc_html_e('Type', 'xzeroprotect-wp'); ?></th>
-                    <th><?php esc_html_e('Reason', 'xzeroprotect-wp'); ?></th>
-                    <th><?php esc_html_e('User-Agent', 'xzeroprotect-wp'); ?></th>
+                    <th><?php esc_html_e('Time', 'xzeroprotect'); ?></th>
+                    <th><?php esc_html_e('IP', 'xzeroprotect'); ?></th>
+                    <th><?php esc_html_e('URI', 'xzeroprotect'); ?></th>
+                    <th><?php esc_html_e('Type', 'xzeroprotect'); ?></th>
+                    <th><?php esc_html_e('Reason', 'xzeroprotect'); ?></th>
+                    <th><?php esc_html_e('User-Agent', 'xzeroprotect'); ?></th>
                 </tr></thead>
                 <tbody>
                 <?php foreach ($blocks as $xzp_b): ?>

@@ -100,10 +100,10 @@ No Redis. No external API. No cloud service. Everything runs on your own server.
 ```bash
 # Clone into your plugins directory
 cd /path/to/wp-content/plugins
-git clone https://github.com/webrium/xzeroprotect-wp.git
+git clone https://github.com/webrium/xzeroprotect-wp.git xzeroprotect
 
 # Install the PHP library dependency
-cd xzeroprotect-wp
+cd xzeroprotect
 composer install --no-dev --optimize-autoloader
 ```
 
@@ -140,8 +140,8 @@ Only requests that reach step 8 without being blocked are recorded as real visit
 ## Plugin Structure
 
 ```
-xzeroprotect-wp/
-├── xzeroprotect-wp.php          # Plugin bootstrap and header
+xzeroprotect/
+├── xzeroprotect.php             # Plugin bootstrap and header
 ├── uninstall.php                # Cleanup on plugin deletion
 ├── composer.json
 ├── readme.txt                   # WordPress.org readme

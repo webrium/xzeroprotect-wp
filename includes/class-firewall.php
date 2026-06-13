@@ -62,7 +62,7 @@ class XZP_Firewall
     private static function getStoragePath(): string
     {
         $upload_dir = wp_upload_dir();
-        $path = trailingslashit($upload_dir['basedir']) . 'xzeroprotect-wp';
+        $path = trailingslashit($upload_dir['basedir']) . 'xzeroprotect';
 
         if (!file_exists($path)) {
             wp_mkdir_p($path);

@@ -4,7 +4,7 @@ Tags: firewall, security, bot-protection, analytics, waf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.1.2
+Stable tag: 1.1.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -34,7 +34,7 @@ xZeroProtect brings the power of the [xZeroProtect PHP library](https://github.c
 
 == Installation ==
 
-1. Upload the plugin via **Plugins → Add New Plugin → Upload Plugin** and select the plugin zip file, or extract the `xzeroprotect-wp` folder into `/wp-content/plugins/`
+1. Upload the plugin via **Plugins → Add New Plugin → Upload Plugin** and select the plugin zip file, or extract the `xzeroprotect` folder into `/wp-content/plugins/`
 2. Activate the plugin in **Plugins → Installed Plugins**
 3. Go to **xZeroProtect → Settings** to configure
 
@@ -60,6 +60,16 @@ servers. All stored data is automatically deleted after the configured retention
 (default: 30 days). All data is permanently removed when the plugin is uninstalled.
 
 == Changelog ==
+
+= 1.1.3 =
+* Renamed plugin slug from xzeroprotect-wp to xzeroprotect (resolves trademarked-term warning for the "wp" suffix)
+* Fixed Text Domain to match the new slug ("xzeroprotect") across all strings
+* Renamed main plugin file to xzeroprotect.php
+* Removed the unused "Domain Path" header (no languages folder bundled)
+* Moved firewall storage directory from uploads/xzeroprotect-wp to uploads/xzeroprotect
+* Sanitized $_POST['days'] in AJAX handlers before casting
+* Added phpcs ignore annotations for safe, already-prepared direct DB queries
+* Renamed internal constants from XZPWP_* to XZP_*
 
 = 1.1.2 =
 * Updated bundled Chart.js to v4.5.1

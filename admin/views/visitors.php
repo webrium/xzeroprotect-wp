@@ -5,8 +5,8 @@
         <div class="xzp-header__left">
             <span class="xzp-logo">👤</span>
             <div>
-                <h1><?php esc_html_e('Real Visitors', 'xzeroprotect-wp'); ?></h1>
-                <p><?php esc_html_e('Verified human traffic — bots and scanners excluded', 'xzeroprotect-wp'); ?></p>
+                <h1><?php esc_html_e('Real Visitors', 'xzeroprotect'); ?></h1>
+                <p><?php esc_html_e('Verified human traffic — bots and scanners excluded', 'xzeroprotect'); ?></p>
             </div>
         </div>
     </div>
@@ -14,17 +14,17 @@
     <div class="xzp-panel">
         <div class="xzp-panel__body xzp-panel__body--flush">
             <?php if (empty($visits)): ?>
-                <p class="xzp-empty"><?php esc_html_e('No visitor data yet. Make sure Visitor Tracking is enabled in Settings.', 'xzeroprotect-wp'); ?></p>
+                <p class="xzp-empty"><?php esc_html_e('No visitor data yet. Make sure Visitor Tracking is enabled in Settings.', 'xzeroprotect'); ?></p>
             <?php else: ?>
             <table class="xzp-table xzp-table--full">
                 <thead><tr>
-                    <th><?php esc_html_e('Time', 'xzeroprotect-wp'); ?></th>
-                    <th><?php esc_html_e('IP', 'xzeroprotect-wp'); ?></th>
-                    <th><?php esc_html_e('Path', 'xzeroprotect-wp'); ?></th>
-                    <th><?php esc_html_e('Browser', 'xzeroprotect-wp'); ?></th>
-                    <th><?php esc_html_e('OS', 'xzeroprotect-wp'); ?></th>
-                    <th><?php esc_html_e('Device', 'xzeroprotect-wp'); ?></th>
-                    <th><?php esc_html_e('Referer', 'xzeroprotect-wp'); ?></th>
+                    <th><?php esc_html_e('Time', 'xzeroprotect'); ?></th>
+                    <th><?php esc_html_e('IP', 'xzeroprotect'); ?></th>
+                    <th><?php esc_html_e('Path', 'xzeroprotect'); ?></th>
+                    <th><?php esc_html_e('Browser', 'xzeroprotect'); ?></th>
+                    <th><?php esc_html_e('OS', 'xzeroprotect'); ?></th>
+                    <th><?php esc_html_e('Device', 'xzeroprotect'); ?></th>
+                    <th><?php esc_html_e('Referer', 'xzeroprotect'); ?></th>
                 </tr></thead>
                 <tbody>
                 <?php foreach ($visits as $xzp_v): ?>
