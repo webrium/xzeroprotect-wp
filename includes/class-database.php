@@ -140,22 +140,22 @@ class XZP_Database
         $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
 
         return [
-            'total_visits'   => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            'total_visits'   => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
                 "SELECT COUNT(*) FROM {$visits} WHERE visited_at >= %s", $since)),
 
-            'unique_visitors' => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            'unique_visitors' => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
                 "SELECT COUNT(DISTINCT fingerprint) FROM {$visits} WHERE visited_at >= %s", $since)),
 
-            'total_blocks'   => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            'total_blocks'   => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
                 "SELECT COUNT(*) FROM {$blocks} WHERE blocked_at >= %s", $since)),
 
-            'blocked_today'  => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            'blocked_today'  => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
                 "SELECT COUNT(*) FROM {$blocks} WHERE blocked_at >= %s", gmdate('Y-m-d 00:00:00'))),
 
-            'visits_today'   => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            'visits_today'   => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
                 "SELECT COUNT(*) FROM {$visits} WHERE visited_at >= %s", gmdate('Y-m-d 00:00:00'))),
 
-            'unique_today'   => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            'unique_today'   => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
                 "SELECT COUNT(DISTINCT fingerprint) FROM {$visits} WHERE visited_at >= %s", gmdate('Y-m-d 00:00:00'))),
         ];
     }
@@ -167,13 +167,15 @@ class XZP_Database
         $blocks = $wpdb->prefix . 'xzp_blocks';
         $since  = gmdate('Y-m-d', strtotime("-{$days} days"));
 
-        $visitRows = $wpdb->get_results($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+        $visitRows = $wpdb->get_results($wpdb->prepare(
             "SELECT DATE(visited_at) as day, COUNT(*) as total, COUNT(DISTINCT fingerprint) as unique_v
              FROM {$visits} WHERE visited_at >= %s GROUP BY day ORDER BY day ASC",
             $since
         ), ARRAY_A);
 
-        $blockRows = $wpdb->get_results($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+        $blockRows = $wpdb->get_results($wpdb->prepare(
             "SELECT DATE(blocked_at) as day, COUNT(*) as total
              FROM {$blocks} WHERE blocked_at >= %s GROUP BY day ORDER BY day ASC",
             $since
@@ -203,7 +205,8 @@ class XZP_Database
         global $wpdb;
         $visits = $wpdb->prefix . 'xzp_visits';
         $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
-        return $wpdb->get_results($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+        return $wpdb->get_results($wpdb->prepare(
             "SELECT path, COUNT(*) as hits, COUNT(DISTINCT fingerprint) as unique_v
              FROM {$visits} WHERE visited_at >= %s
              GROUP BY path ORDER BY hits DESC LIMIT %d",
@@ -216,7 +219,8 @@ class XZP_Database
         global $wpdb;
         $blocks = $wpdb->prefix . 'xzp_blocks';
         $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
-        return $wpdb->get_results($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+        return $wpdb->get_results($wpdb->prepare(
             "SELECT block_type, COUNT(*) as total
              FROM {$blocks} WHERE blocked_at >= %s
              GROUP BY block_type ORDER BY total DESC LIMIT 10",
@@ -229,7 +233,8 @@ class XZP_Database
         global $wpdb;
         $visits = $wpdb->prefix . 'xzp_visits';
         $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
-        return $wpdb->get_results($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+        return $wpdb->get_results($wpdb->prepare(
             "SELECT device_type, COUNT(*) as total
              FROM {$visits} WHERE visited_at >= %s
              GROUP BY device_type",
@@ -241,7 +246,8 @@ class XZP_Database
     {
         global $wpdb;
         $blocks = $wpdb->prefix . 'xzp_blocks';
-        return $wpdb->get_results($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+        return $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM {$blocks} ORDER BY blocked_at DESC LIMIT %d", $limit
         ), ARRAY_A) ?: [];
     }
@@ -250,7 +256,8 @@ class XZP_Database
     {
         global $wpdb;
         $visits = $wpdb->prefix . 'xzp_visits';
-        return $wpdb->get_results($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+        return $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM {$visits} ORDER BY visited_at DESC LIMIT %d", $limit
         ), ARRAY_A) ?: [];
     }
