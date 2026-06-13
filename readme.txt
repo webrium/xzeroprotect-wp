@@ -1,5 +1,5 @@
 === xZeroProtect ===
-Contributors: webrium, benkhalifedev
+Contributors: webrium, benkhalife
 Tags: firewall, security, bot-protection, analytics, waf
 Requires at least: 6.0
 Tested up to: 7.0
@@ -34,10 +34,9 @@ xZeroProtect brings the power of the [xZeroProtect PHP library](https://github.c
 
 == Installation ==
 
-1. Upload the `xzeroprotect-wp` folder to `/wp-content/plugins/`
-2. Run `composer install` inside the plugin directory
-3. Activate the plugin in **Plugins → Installed Plugins**
-4. Go to **xZeroProtect → Settings** to configure
+1. Upload the plugin via **Plugins → Add New Plugin → Upload Plugin** and select the plugin zip file, or extract the `xzeroprotect-wp` folder into `/wp-content/plugins/`
+2. Activate the plugin in **Plugins → Installed Plugins**
+3. Go to **xZeroProtect → Settings** to configure
 
 == Frequently Asked Questions ==
 

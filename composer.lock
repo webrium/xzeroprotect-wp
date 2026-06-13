@@ -8,16 +8,16 @@
     "packages": [
         {
             "name": "webrium/xzeroprotect",
-            "version": "1.1.1",
+            "version": "1.1.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/webrium/xzeroprotect.git",
-                "reference": "a1af5695f561766a0bfaec0a85d852acbe8b256f"
+                "reference": "b98e42dfaa34b3629b46d6f22f252157186fad86"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/webrium/xzeroprotect/zipball/a1af5695f561766a0bfaec0a85d852acbe8b256f",
-                "reference": "a1af5695f561766a0bfaec0a85d852acbe8b256f",
+                "url": "https://api.github.com/repos/webrium/xzeroprotect/zipball/b98e42dfaa34b3629b46d6f22f252157186fad86",
+                "reference": "b98e42dfaa34b3629b46d6f22f252157186fad86",
                 "shasum": ""
             },
             "require": {
@@ -52,9 +52,9 @@
             ],
             "support": {
                 "issues": "https://github.com/webrium/xzeroprotect/issues",
-                "source": "https://github.com/webrium/xzeroprotect/tree/1.1.1"
+                "source": "https://github.com/webrium/xzeroprotect/tree/1.1.2"
             },
-            "time": "2026-06-07T13:24:45+00:00"
+            "time": "2026-06-13T12:37:35+00:00"
         }
     ],
     "packages-dev": [],
