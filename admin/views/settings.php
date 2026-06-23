@@ -19,8 +19,8 @@
     <?php endif; ?>
 
     <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-        <?php wp_nonce_field('xzp_save_settings'); ?>
-        <input type="hidden" name="action" value="xzp_save_settings">
+        <?php wp_nonce_field('xzerop_save_settings'); ?>
+        <input type="hidden" name="action" value="xzerop_save_settings">
 
         <!-- ── Firewall Mode ──────────────────────────────────────────────── -->
         <div class="xzp-panel">
@@ -225,8 +225,8 @@
         <div class="xzp-panel__body xzp-danger-zone">
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>"
                   onsubmit="return confirm('<?php echo esc_js(__('Are you sure? This cannot be undone.', 'xzeroprotect')); ?>')">
-                <?php wp_nonce_field('xzp_clear_data'); ?>
-                <input type="hidden" name="action" value="xzp_clear_data">
+                <?php wp_nonce_field('xzerop_clear_data'); ?>
+                <input type="hidden" name="action" value="xzerop_clear_data">
                 <div class="xzp-danger-row">
                     <select name="clear_type">
                         <option value="visits"><?php esc_html_e('Clear visitor logs only', 'xzeroprotect'); ?></option>

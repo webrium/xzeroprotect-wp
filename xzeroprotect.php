@@ -17,16 +17,16 @@ declare(strict_types=1);
 
 defined("ABSPATH") || exit();
 
-define("XZP_VERSION", "1.1.3");
-define("XZP_FILE", __FILE__);
-define("XZP_DIR", plugin_dir_path(__FILE__));
-define("XZP_URL", plugin_dir_url(__FILE__));
-define("XZP_SLUG", "xzeroprotect");
-define("XZP_DB_TABLE", "xzp_visits");
+define("XZEROP_VERSION", "1.1.3");
+define("XZEROP_FILE", __FILE__);
+define("XZEROP_DIR", plugin_dir_path(__FILE__));
+define("XZEROP_URL", plugin_dir_url(__FILE__));
+define("XZEROP_SLUG", "xzeroprotect");
+define("XZEROP_DB_TABLE", "xzerop_visits");
 
 // ── Autoload ──────────────────────────────────────────────────────────────────
 // Try Composer autoloader first (dev/manual install), then bundled fallback
-$xzp_composer = XZP_DIR . "vendor/autoload.php";
+$xzp_composer = XZEROP_DIR . "vendor/autoload.php";
 if (file_exists($xzp_composer)) {
     require_once $xzp_composer;
 } else {
@@ -43,21 +43,21 @@ if (file_exists($xzp_composer)) {
 }
 
 // ── Core includes ─────────────────────────────────────────────────────────────
-require_once XZP_DIR . "includes/class-database.php";
-require_once XZP_DIR . "includes/class-firewall.php";
-require_once XZP_DIR . "includes/class-settings.php";
-require_once XZP_DIR . "includes/class-admin.php";
+require_once XZEROP_DIR . "includes/class-database.php";
+require_once XZEROP_DIR . "includes/class-firewall.php";
+require_once XZEROP_DIR . "includes/class-settings.php";
+require_once XZEROP_DIR . "includes/class-admin.php";
 
 // ── Activation / Deactivation ─────────────────────────────────────────────────
-register_activation_hook(__FILE__, ["XZP_Database", "install"]);
-register_deactivation_hook(__FILE__, ["XZP_Database", "deactivate"]);
+register_activation_hook(__FILE__, ["XZEROP_Database", "install"]);
+register_deactivation_hook(__FILE__, ["XZEROP_Database", "deactivate"]);
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 // Firewall runs as early as possible — before WordPress processes the request
-add_action("init", ["XZP_Firewall", "run"], 1);
+add_action("init", ["XZEROP_Firewall", "run"], 1);
 
 // Admin UI
 if (is_admin()) {
-    new XZP_Admin();
+    new XZEROP_Admin();
 }

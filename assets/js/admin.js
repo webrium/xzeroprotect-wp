@@ -23,7 +23,7 @@
                 labels: labels,
                 datasets: [
                     {
-                        label: xzpData.i18n.visits,
+                        label: xzeropData.i18n.visits,
                         data: visits,
                         backgroundColor: 'rgba(59,130,246,0.15)',
                         borderColor: 'rgba(59,130,246,1)',
@@ -32,7 +32,7 @@
                         type: 'bar',
                     },
                     {
-                        label: xzpData.i18n.unique,
+                        label: xzeropData.i18n.unique,
                         data: unique,
                         borderColor: 'rgba(16,185,129,1)',
                         backgroundColor: 'transparent',
@@ -43,7 +43,7 @@
                         yAxisID: 'y',
                     },
                     {
-                        label: xzpData.i18n.blocked,
+                        label: xzeropData.i18n.blocked,
                         data: blocked,
                         backgroundColor: 'rgba(239,68,68,0.15)',
                         borderColor: 'rgba(239,68,68,1)',
@@ -69,11 +69,11 @@
     }
 
     // Initial render from inline data
-    if (typeof window.xzpChartData !== 'undefined') {
+    if (typeof window.xzeropChartData !== 'undefined') {
         // Defer until Chart.js is ready
         window.addEventListener('load', function () {
             if (typeof Chart !== 'undefined') {
-                renderChart(window.xzpChartData);
+                renderChart(window.xzeropChartData);
             }
         });
     }
@@ -84,9 +84,9 @@
         $(this).addClass('active');
 
         var days = $(this).data('days');
-        $.post(xzpData.ajaxUrl, {
-            action: 'xzp_get_chart',
-            nonce:  xzpData.nonce,
+        $.post(xzeropData.ajaxUrl, {
+            action: 'xzerop_get_chart',
+            nonce:  xzeropData.nonce,
             days:   days,
         }, function (response) {
             if (response.success) {

@@ -1,5 +1,5 @@
 === xZeroProtect ===
-Contributors: webrium, benkhalife
+Contributors: benkhalifedev
 Tags: firewall, security, bot-protection, analytics, waf
 Requires at least: 6.0
 Tested up to: 7.0

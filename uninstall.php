@@ -7,4 +7,4 @@
 defined('WP_UNINSTALL_PLUGIN') || exit;
 
 require_once plugin_dir_path(__FILE__) . 'includes/class-database.php';
-XZP_Database::uninstall();
+XZEROP_Database::uninstall();

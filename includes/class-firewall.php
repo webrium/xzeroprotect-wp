@@ -16,11 +16,11 @@ use Webrium\XZeroProtect\VisitInfo;
  *  - Hook visitor tracking into the database
  *  - Schedule periodic data pruning
  */
-class XZP_Firewall
+class XZEROP_Firewall
 {
     public static function run(): void
     {
-        $s = XZP_Settings::all();
+        $s = XZEROP_Settings::all();
 
         // Firewall is off
         if ($s['mode'] === 'off') {
@@ -112,8 +112,8 @@ class XZP_Firewall
             'apache_blocking' => $s['apache_blocking'],
 
             'whitelist' => [
-                'ips'   => XZP_Settings::getWhitelistIps(),
-                'paths' => XZP_Settings::getWhitelistPaths(),
+                'ips'   => XZEROP_Settings::getWhitelistIps(),
+                'paths' => XZEROP_Settings::getWhitelistPaths(),
             ],
 
             'block_response' => [
@@ -170,7 +170,7 @@ class XZP_Firewall
             return;
         }
 
-        XZP_Database::insertVisit($visit->toArray());
+        XZEROP_Database::insertVisit($visit->toArray());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -185,18 +185,18 @@ class XZP_Firewall
 
     public static function schedulePruning(): void
     {
-        if (!wp_next_scheduled('xzp_prune_data')) {
-            wp_schedule_event(time(), 'daily', 'xzp_prune_data');
+        if (!wp_next_scheduled('xzerop_prune_data')) {
+            wp_schedule_event(time(), 'daily', 'xzerop_prune_data');
         }
     }
 
     public static function pruneData(): void
     {
-        $days = (int) XZP_Settings::get('keep_days', 30);
-        XZP_Database::pruneOldData($days);
+        $days = (int) XZEROP_Settings::get('keep_days', 30);
+        XZEROP_Database::pruneOldData($days);
     }
 }
 
 // Register scheduled pruning
-add_action('xzp_prune_data', ['XZP_Firewall', 'pruneData']);
-add_action('wp_loaded',      ['XZP_Firewall', 'schedulePruning']);
+add_action('xzerop_prune_data', ['XZEROP_Firewall', 'pruneData']);
+add_action('wp_loaded',      ['XZEROP_Firewall', 'schedulePruning']);

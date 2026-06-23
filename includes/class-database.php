@@ -7,10 +7,10 @@ defined('ABSPATH') || exit;
  * Handles all database operations for xZeroProtect.
  *
  * Tables:
- *   {prefix}xzp_visits  — verified real visitors (passed all firewall checks)
- *   {prefix}xzp_blocks  — blocked requests (bot/attack/suspicious)
+ *   {prefix}xzerop_visits  — verified real visitors (passed all firewall checks)
+ *   {prefix}xzerop_blocks  — blocked requests (bot/attack/suspicious)
  */
-class XZP_Database
+class XZEROP_Database
 {
     // ── Schema version — bump when altering table structure ──────────────────
     private const SCHEMA_VERSION = '1';
@@ -21,8 +21,8 @@ class XZP_Database
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
         $charset = $wpdb->get_charset_collate();
-        $visits  = $wpdb->prefix . 'xzp_visits';
-        $blocks  = $wpdb->prefix . 'xzp_blocks';
+        $visits  = $wpdb->prefix . 'xzerop_visits';
+        $blocks  = $wpdb->prefix . 'xzerop_blocks';
 
         // Real visitor log
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.SchemaChange
@@ -65,7 +65,7 @@ class XZP_Database
             KEY idx_blocked_at (blocked_at)
         ) {$charset};");
 
-        update_option('xzp_db_version', self::SCHEMA_VERSION);
+        update_option('xzerop_db_version', self::SCHEMA_VERSION);
     }
 
     public static function deactivate(): void
@@ -77,11 +77,11 @@ class XZP_Database
     {
         global $wpdb;
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
-        $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}xzp_visits");
+        $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}xzerop_visits");
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
-        $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}xzp_blocks");
-        delete_option('xzp_db_version');
-        delete_option('xzp_settings');
+        $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}xzerop_blocks");
+        delete_option('xzerop_db_version');
+        delete_option('xzerop_settings');
     }
 
     // ── Visits ────────────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ class XZP_Database
         global $wpdb;
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
         $wpdb->insert(
-            $wpdb->prefix . 'xzp_visits',
+            $wpdb->prefix . 'xzerop_visits',
             [
                 'ip'          => $data['ip']          ?? '',
                 'path'        => substr($data['path'] ?? '', 0, 2048),
@@ -116,7 +116,7 @@ class XZP_Database
         global $wpdb;
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
         $wpdb->insert(
-            $wpdb->prefix . 'xzp_blocks',
+            $wpdb->prefix . 'xzerop_blocks',
             [
                 'ip'         => $data['ip']         ?? '',
                 'uri'        => substr($data['uri'] ?? '', 0, 2048),
@@ -135,8 +135,8 @@ class XZP_Database
     public static function getVisitStats(int $days = 30): array
     {
         global $wpdb;
-        $visits = $wpdb->prefix . 'xzp_visits';
-        $blocks = $wpdb->prefix . 'xzp_blocks';
+        $visits = $wpdb->prefix . 'xzerop_visits';
+        $blocks = $wpdb->prefix . 'xzerop_blocks';
         $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
 
         return [
@@ -163,8 +163,8 @@ class XZP_Database
     public static function getVisitsChart(int $days = 14): array
     {
         global $wpdb;
-        $visits = $wpdb->prefix . 'xzp_visits';
-        $blocks = $wpdb->prefix . 'xzp_blocks';
+        $visits = $wpdb->prefix . 'xzerop_visits';
+        $blocks = $wpdb->prefix . 'xzerop_blocks';
         $since  = gmdate('Y-m-d', strtotime("-{$days} days"));
 
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
@@ -203,7 +203,7 @@ class XZP_Database
     public static function getTopPages(int $limit = 10, int $days = 30): array
     {
         global $wpdb;
-        $visits = $wpdb->prefix . 'xzp_visits';
+        $visits = $wpdb->prefix . 'xzerop_visits';
         $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
         return $wpdb->get_results($wpdb->prepare(
@@ -217,7 +217,7 @@ class XZP_Database
     public static function getTopBlockTypes(int $days = 30): array
     {
         global $wpdb;
-        $blocks = $wpdb->prefix . 'xzp_blocks';
+        $blocks = $wpdb->prefix . 'xzerop_blocks';
         $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
         return $wpdb->get_results($wpdb->prepare(
@@ -231,7 +231,7 @@ class XZP_Database
     public static function getDeviceBreakdown(int $days = 30): array
     {
         global $wpdb;
-        $visits = $wpdb->prefix . 'xzp_visits';
+        $visits = $wpdb->prefix . 'xzerop_visits';
         $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
         return $wpdb->get_results($wpdb->prepare(
@@ -245,7 +245,7 @@ class XZP_Database
     public static function getRecentBlocks(int $limit = 50): array
     {
         global $wpdb;
-        $blocks = $wpdb->prefix . 'xzp_blocks';
+        $blocks = $wpdb->prefix . 'xzerop_blocks';
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
         return $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM {$blocks} ORDER BY blocked_at DESC LIMIT %d", $limit
@@ -255,7 +255,7 @@ class XZP_Database
     public static function getRecentVisits(int $limit = 50): array
     {
         global $wpdb;
-        $visits = $wpdb->prefix . 'xzp_visits';
+        $visits = $wpdb->prefix . 'xzerop_visits';
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
         return $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM {$visits} ORDER BY visited_at DESC LIMIT %d", $limit
@@ -267,8 +267,8 @@ class XZP_Database
         global $wpdb;
         $cutoff = gmdate('Y-m-d H:i:s', strtotime("-{$keepDays} days"));
         $wpdb->query($wpdb->prepare(
-            "DELETE FROM {$wpdb->prefix}xzp_visits WHERE visited_at < %s", $cutoff)); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            "DELETE FROM {$wpdb->prefix}xzerop_visits WHERE visited_at < %s", $cutoff)); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         $wpdb->query($wpdb->prepare(
-            "DELETE FROM {$wpdb->prefix}xzp_blocks WHERE blocked_at < %s", $cutoff)); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            "DELETE FROM {$wpdb->prefix}xzerop_blocks WHERE blocked_at < %s", $cutoff)); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
 }

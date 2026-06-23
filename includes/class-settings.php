@@ -6,9 +6,9 @@ defined('ABSPATH') || exit;
 /**
  * Manages xZeroProtect plugin settings stored in wp_options.
  */
-class XZP_Settings
+class XZEROP_Settings
 {
-    private const OPTION_KEY = 'xzp_settings';
+    private const OPTION_KEY = 'xzerop_settings';
 
     private static array $defaults = [
         // Firewall mode
