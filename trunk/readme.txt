@@ -4,7 +4,7 @@ Tags: firewall, security, bot-protection, analytics, waf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.1.3
+Stable tag: 1.1.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -60,6 +60,11 @@ servers. All stored data is automatically deleted after the configured retention
 (default: 30 days). All data is permanently removed when the plugin is uninstalled.
 
 == Changelog ==
+
+= 1.1.4 =
+* Fix: Blocked Requests page was always empty — now reads directly from the xZeroProtect library's log file, so both blocked and suspicious (Learning Mode) requests are shown.
+* Fix: Static assets (favicon.ico, CSS, JS, fonts, images) were inflating the rate-limit counter, causing premature bans. A single page view now counts as one request.
+* New: Hint added above the rate-limit fields in Settings explaining what counts as a request.
 
 = 1.1.3 =
 * Renamed plugin slug from xzeroprotect-wp to xzeroprotect (resolves trademarked-term warning for the "wp" suffix)
