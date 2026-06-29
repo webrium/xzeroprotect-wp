@@ -111,6 +111,9 @@
         <div class="xzp-panel">
             <div class="xzp-panel__header"><h2><?php esc_html_e('Rate Limiting', 'xzeroprotect'); ?></h2></div>
             <div class="xzp-panel__body xzp-panel__body--fields">
+                <p class="xzp-hint xzp-field--full" style="margin: 0 0 4px;">
+                    <?php esc_html_e('A "request" is one page load handled by PHP. Static assets (images, CSS, JS, fonts, favicon.ico, robots.txt, sitemap.xml) are skipped and never counted, so a single page view counts as one request — not several.', 'xzeroprotect'); ?>
+                </p>
                 <div class="xzp-field">
                     <label><?php esc_html_e('Max Requests', 'xzeroprotect'); ?></label>
                     <input type="number" name="rate_limit_max" min="1" value="<?php echo esc_attr($settings['rate_limit_max']); ?>">

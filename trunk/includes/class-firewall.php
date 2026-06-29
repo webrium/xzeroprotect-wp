@@ -32,6 +32,18 @@ class XZEROP_Firewall
             return;
         }
 
+        // Skip firewall entirely for static asset requests.
+        //
+        // On many WordPress hosts these requests are served by the web server
+        // and never reach PHP — but if a static file doesn't exist on disk
+        // (e.g. /favicon.ico on a site that has no physical favicon),
+        // WordPress's rewrite rules route the request to index.php. Counting
+        // those toward the rate limit makes a single page view consume
+        // several "requests" and triggers premature bans (issue #7).
+        if (self::isStaticAssetRequest()) {
+            return;
+        }
+
         try {
             $firewall = XZeroProtect::init(self::buildConfig($s));
 
@@ -179,6 +191,52 @@ class XZEROP_Firewall
     {
         // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash
         return isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '';
+    }
+
+    /**
+     * Whether the current request targets a static asset that should bypass
+     * the firewall entirely. Covers favicon, robots.txt, and common static
+     * file extensions that browsers/crawlers fetch alongside page views.
+     *
+     * Skipping these prevents a single page view (HTML + favicon + a few
+     * assets) from inflating the rate-limit counter into multiple "requests".
+     */
+    private static function isStaticAssetRequest(): bool
+    {
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash
+        $uri = isset($_SERVER['REQUEST_URI']) ? wp_unslash($_SERVER['REQUEST_URI']) : '';
+        if ($uri === '') {
+            return false;
+        }
+
+        // Strip query string
+        $path = strtolower((string) parse_url($uri, PHP_URL_PATH));
+        if ($path === '') {
+            return false;
+        }
+
+        // Exact-match static paths that have no extension
+        static $exact = ['/favicon.ico', '/robots.txt', '/sitemap.xml', '/apple-touch-icon.png', '/apple-touch-icon-precomposed.png'];
+        if (in_array($path, $exact, true)) {
+            return true;
+        }
+
+        // Extension-based match — only assets that are part of normal page
+        // loads. Extensions like .txt, .xml, .pdf, .zip are NOT skipped
+        // because scanners actively probe them (/backup.zip, /db.txt, etc.).
+        static $exts = [
+            '.ico', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.avif',
+            '.css', '.js', '.mjs', '.map',
+            '.woff', '.woff2', '.ttf', '.otf', '.eot',
+            '.mp3', '.mp4', '.webm', '.ogg', '.wav',
+        ];
+        foreach ($exts as $ext) {
+            if (str_ends_with($path, $ext)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // ── Scheduled cleanup ─────────────────────────────────────────────────────
