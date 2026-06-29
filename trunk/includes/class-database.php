@@ -136,8 +136,8 @@ class XZEROP_Database
     {
         global $wpdb;
         $visits = $wpdb->prefix . 'xzerop_visits';
-        $blocks = $wpdb->prefix . 'xzerop_blocks';
         $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
+        $today  = gmdate('Y-m-d 00:00:00');
 
         return [
             'total_visits'   => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
@@ -146,17 +146,16 @@ class XZEROP_Database
             'unique_visitors' => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
                 "SELECT COUNT(DISTINCT fingerprint) FROM {$visits} WHERE visited_at >= %s", $since)),
 
-            'total_blocks'   => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
-                "SELECT COUNT(*) FROM {$blocks} WHERE blocked_at >= %s", $since)),
-
-            'blocked_today'  => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
-                "SELECT COUNT(*) FROM {$blocks} WHERE blocked_at >= %s", gmdate('Y-m-d 00:00:00'))),
+            // Blocks are stored in the xZeroProtect library's file-based log,
+            // not in a DB table — read them through BlockReader instead.
+            'total_blocks'   => XZEROP_BlockReader::countSince($since),
+            'blocked_today'  => XZEROP_BlockReader::countSince($today),
 
             'visits_today'   => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
-                "SELECT COUNT(*) FROM {$visits} WHERE visited_at >= %s", gmdate('Y-m-d 00:00:00'))),
+                "SELECT COUNT(*) FROM {$visits} WHERE visited_at >= %s", $today)),
 
             'unique_today'   => (int) $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
-                "SELECT COUNT(DISTINCT fingerprint) FROM {$visits} WHERE visited_at >= %s", gmdate('Y-m-d 00:00:00'))),
+                "SELECT COUNT(DISTINCT fingerprint) FROM {$visits} WHERE visited_at >= %s", $today)),
         ];
     }
 
@@ -164,7 +163,6 @@ class XZEROP_Database
     {
         global $wpdb;
         $visits = $wpdb->prefix . 'xzerop_visits';
-        $blocks = $wpdb->prefix . 'xzerop_blocks';
         $since  = gmdate('Y-m-d', strtotime("-{$days} days"));
 
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
@@ -174,12 +172,8 @@ class XZEROP_Database
             $since
         ), ARRAY_A);
 
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
-        $blockRows = $wpdb->get_results($wpdb->prepare(
-            "SELECT DATE(blocked_at) as day, COUNT(*) as total
-             FROM {$blocks} WHERE blocked_at >= %s GROUP BY day ORDER BY day ASC",
-            $since
-        ), ARRAY_A);
+        // Blocks come from the library's log file
+        $blocksByDay = XZEROP_BlockReader::blocksPerDay($days);
 
         // Merge into a single indexed structure
         $chart = [];
@@ -192,9 +186,9 @@ class XZEROP_Database
                 $chart[$r['day']]['unique'] = (int)$r['unique_v'];
             }
         }
-        foreach ($blockRows as $r) {
-            if (isset($chart[$r['day']])) {
-                $chart[$r['day']]['blocks'] = (int)$r['total'];
+        foreach ($blocksByDay as $day => $total) {
+            if (isset($chart[$day])) {
+                $chart[$day]['blocks'] = (int)$total;
             }
         }
         return $chart;
@@ -216,16 +210,8 @@ class XZEROP_Database
 
     public static function getTopBlockTypes(int $days = 30): array
     {
-        global $wpdb;
-        $blocks = $wpdb->prefix . 'xzerop_blocks';
-        $since  = gmdate('Y-m-d H:i:s', strtotime("-{$days} days"));
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
-        return $wpdb->get_results($wpdb->prepare(
-            "SELECT block_type, COUNT(*) as total
-             FROM {$blocks} WHERE blocked_at >= %s
-             GROUP BY block_type ORDER BY total DESC LIMIT 10",
-            $since
-        ), ARRAY_A) ?: [];
+        // Blocks live in the file-based log, not the DB.
+        return XZEROP_BlockReader::topTypes($days, 10);
     }
 
     public static function getDeviceBreakdown(int $days = 30): array
@@ -244,12 +230,8 @@ class XZEROP_Database
 
     public static function getRecentBlocks(int $limit = 50): array
     {
-        global $wpdb;
-        $blocks = $wpdb->prefix . 'xzerop_blocks';
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
-        return $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM {$blocks} ORDER BY blocked_at DESC LIMIT %d", $limit
-        ), ARRAY_A) ?: [];
+        // Blocks live in the file-based log, not the DB.
+        return XZEROP_BlockReader::recent($limit);
     }
 
     public static function getRecentVisits(int $limit = 50): array

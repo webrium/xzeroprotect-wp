@@ -182,6 +182,8 @@ class XZEROP_Admin
         }
         if (in_array($type, ['blocks', 'all'], true)) {
             $wpdb->query("TRUNCATE TABLE {$wpdb->prefix}xzerop_blocks"); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+            // Blocks are persisted by the library to a log file — clear that too.
+            XZEROP_BlockReader::clear();
         }
         wp_safe_redirect(add_query_arg(['page' => 'xzerop-settings', 'cleared' => '1'], admin_url('admin.php')));
         exit;
