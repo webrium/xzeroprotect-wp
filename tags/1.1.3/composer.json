@@ -1,0 +1,18 @@
+{
+    "name": "webrium/xzeroprotect-wp",
+    "description": "xZeroProtect WordPress plugin — firewall and real visitor analytics.",
+    "type": "wordpress-plugin",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.0",
+        "webrium/xzeroprotect": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Webrium\\XZeroProtect\\": "vendor/webrium/xzeroprotect/src/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}

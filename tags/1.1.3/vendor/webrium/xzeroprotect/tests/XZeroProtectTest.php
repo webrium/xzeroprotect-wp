@@ -1,0 +1,773 @@
+<?php
+
+declare(strict_types=1);
+
+use PHPUnit\Framework\TestCase;
+use Webrium\XZeroProtect\Storage;
+use Webrium\XZeroProtect\IPManager;
+use Webrium\XZeroProtect\PatternDetector;
+use Webrium\XZeroProtect\RateLimiter;
+use Webrium\XZeroProtect\RuleEngine;
+use Webrium\XZeroProtect\RuleResult;
+use Webrium\XZeroProtect\Request;
+use Webrium\XZeroProtect\ApacheBlocker;
+use Webrium\XZeroProtect\Logger;
+use Webrium\XZeroProtect\DeviceInfo;
+use Webrium\XZeroProtect\VisitInfo;
+
+class XZeroProtectTest extends TestCase
+{
+    private string  $tmpDir;
+    private Storage $storage;
+
+    protected function setUp(): void
+    {
+        $this->tmpDir  = sys_get_temp_dir() . '/xzp_test_' . uniqid();
+        mkdir($this->tmpDir, 0755, true);
+        $this->storage = new Storage($this->tmpDir);
+    }
+
+    protected function tearDown(): void
+    {
+        $this->removeDir($this->tmpDir);
+
+        // Clean up any proxy headers set by IP-resolution tests
+        foreach (['HTTP_CF_CONNECTING_IP', 'HTTP_TRUE_CLIENT_IP', 'HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR'] as $header) {
+            unset($_SERVER[$header]);
+        }
+    }
+
+    // =========================================================================
+    // Storage Tests
+    // =========================================================================
+
+    public function test_storage_directories_created(): void
+    {
+        $this->assertDirectoryExists($this->tmpDir . '/bans');
+        $this->assertDirectoryExists($this->tmpDir . '/rate');
+        $this->assertDirectoryExists($this->tmpDir . '/violations');
+        $this->assertDirectoryExists($this->tmpDir . '/logs');
+    }
+
+    public function test_ban_and_is_banned(): void
+    {
+        $this->storage->ban('1.2.3.4', 'test', 3600);
+        $this->assertTrue($this->storage->isBanned('1.2.3.4'));
+    }
+
+    public function test_unban(): void
+    {
+        $this->storage->ban('1.2.3.4', 'test', 3600);
+        $this->storage->unban('1.2.3.4');
+        $this->assertFalse($this->storage->isBanned('1.2.3.4'));
+    }
+
+    public function test_permanent_ban(): void
+    {
+        $this->storage->ban('5.5.5.5', 'permanent', 0);
+        $this->assertTrue($this->storage->isBanned('5.5.5.5'));
+    }
+
+    public function test_expired_ban_is_not_banned(): void
+    {
+        // Ban with duration in the past
+        $file = $this->tmpDir . '/bans/1_2_3_99.json';
+        file_put_contents($file, json_encode([
+            'ip'         => '1.2.3.99',
+            'reason'     => 'old',
+            'banned_at'  => time() - 7200,
+            'expires'    => time() - 3600,
+            'bans_count' => 1,
+        ]));
+        $s = new Storage($this->tmpDir);
+        $this->assertFalse($s->isBanned('1.2.3.99'));
+    }
+
+    public function test_violation_tracking(): void
+    {
+        $this->storage->incrementViolation('10.0.0.1');
+        $this->storage->incrementViolation('10.0.0.1');
+        $count = $this->storage->incrementViolation('10.0.0.1');
+        $this->assertSame(3, $count);
+        $this->assertSame(3, $this->storage->getViolationCount('10.0.0.1'));
+    }
+
+    public function test_violation_reset(): void
+    {
+        $this->storage->incrementViolation('10.0.0.2');
+        $this->storage->resetViolations('10.0.0.2');
+        $this->assertSame(0, $this->storage->getViolationCount('10.0.0.2'));
+    }
+
+    public function test_rate_tracking(): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            $this->storage->trackRequest('20.0.0.1', 60);
+        }
+        $count = $this->storage->getRateCount('20.0.0.1', 60);
+        $this->assertSame(5, $count);
+    }
+
+    public function test_log_append(): void
+    {
+        $this->storage->appendLog([
+            'ip' => '1.1.1.1', 'type' => 'sqli', 'uri' => '/test',
+            'reason' => 'UNION SELECT', 'ua' => 'sqlmap',
+        ]);
+        $logs = $this->storage->readLogs(10);
+        $this->assertNotEmpty($logs);
+        $this->assertStringContainsString('1.1.1.1', $logs[0]);
+    }
+
+    public function test_get_all_bans(): void
+    {
+        $this->storage->ban('2.2.2.2', 'r1', 3600);
+        $this->storage->ban('3.3.3.3', 'r2', 3600);
+        $bans = $this->storage->getAllBans();
+        $this->assertArrayHasKey('2.2.2.2', $bans);
+        $this->assertArrayHasKey('3.3.3.3', $bans);
+    }
+
+    // =========================================================================
+    // IPManager Tests
+    // =========================================================================
+
+    public function test_ip_manager_ban_and_check(): void
+    {
+        $manager = new IPManager($this->storage);
+        $manager->ban('9.9.9.9', 'test');
+        $this->assertTrue($manager->isBanned('9.9.9.9'));
+    }
+
+    public function test_ip_manager_whitelist_exact(): void
+    {
+        $manager = new IPManager($this->storage);
+        $manager->whitelist('192.168.1.1');
+        $this->assertTrue($manager->isWhitelisted('192.168.1.1'));
+        $this->assertFalse($manager->isWhitelisted('192.168.1.2'));
+    }
+
+    public function test_ip_manager_whitelist_cidr_ipv4(): void
+    {
+        $manager = new IPManager($this->storage);
+        $manager->whitelist('10.0.0.0/8');
+        $this->assertTrue($manager->isWhitelisted('10.1.2.3'));
+        $this->assertFalse($manager->isWhitelisted('11.0.0.1'));
+    }
+
+    public function test_ip_cidr_slash_24(): void
+    {
+        $manager = new IPManager($this->storage);
+        $manager->whitelist('192.168.5.0/24');
+        $this->assertTrue($manager->isWhitelisted('192.168.5.100'));
+        $this->assertFalse($manager->isWhitelisted('192.168.6.1'));
+    }
+
+    public function test_ip_manager_unban(): void
+    {
+        $manager = new IPManager($this->storage);
+        $manager->ban('8.8.8.8', 'test');
+        $manager->unban('8.8.8.8');
+        $this->assertFalse($manager->isBanned('8.8.8.8'));
+    }
+
+    public function test_ban_permanent(): void
+    {
+        $manager = new IPManager($this->storage);
+        $manager->banPermanent('77.77.77.77', 'perm');
+        $info = $manager->getBanInfo('77.77.77.77');
+        $this->assertSame(0, $info['expires']);
+    }
+
+    // =========================================================================
+    // PatternDetector Tests
+    // =========================================================================
+
+    private function makeDetector(): PatternDetector
+    {
+        $rulesDir = dirname(__DIR__) . '/rules';
+        return new PatternDetector($rulesDir);
+    }
+
+    public function test_suspicious_path_wp_admin(): void
+    {
+        $d = $this->makeDetector();
+        $this->assertTrue($d->isSuspiciousPath('/wp-admin/'));
+    }
+
+    public function test_suspicious_path_env(): void
+    {
+        $d = $this->makeDetector();
+        $this->assertTrue($d->isSuspiciousPath('/.env'));
+    }
+
+    public function test_suspicious_path_php_extension_not_blocked_by_default(): void
+    {
+        // .php is intentionally removed from default paths (see rules/paths.php)
+        // to avoid false positives on apps that serve raw PHP files.
+        $d = $this->makeDetector();
+        $this->assertFalse($d->isSuspiciousPath('/index.php'));
+    }
+
+    public function test_suspicious_path_php_extension_when_added_manually(): void
+    {
+        $d = $this->makeDetector();
+        $d->addPath('.php');
+        $this->assertTrue($d->isSuspiciousPath('/index.php'));
+    }
+
+    public function test_clean_path_passes(): void
+    {
+        $d = $this->makeDetector();
+        $this->assertFalse($d->isSuspiciousPath('/products/shoes'));
+    }
+
+    public function test_add_custom_path(): void
+    {
+        $d = $this->makeDetector();
+        $d->addPath('/secret-panel');
+        $this->assertTrue($d->isSuspiciousPath('/secret-panel/login'));
+    }
+
+    public function test_remove_path(): void
+    {
+        $d = $this->makeDetector();
+        $d->removePath('.php');
+        $this->assertFalse($d->isSuspiciousPath('/index.php'));
+    }
+
+    public function test_suspicious_agent_sqlmap(): void
+    {
+        $d = $this->makeDetector();
+        $this->assertTrue($d->isSuspiciousAgent('sqlmap/1.6'));
+    }
+
+    public function test_empty_agent_is_suspicious(): void
+    {
+        $d = $this->makeDetector();
+        $this->assertTrue($d->isSuspiciousAgent(''));
+    }
+
+    public function test_clean_agent_passes(): void
+    {
+        $d = $this->makeDetector();
+        $this->assertFalse($d->isSuspiciousAgent('Mozilla/5.0 (Windows NT 10.0) Chrome/120'));
+    }
+
+    public function test_add_custom_agent(): void
+    {
+        $d = $this->makeDetector();
+        $d->addAgent('evilbot');
+        $this->assertTrue($d->isSuspiciousAgent('EvilBot/2.0'));
+    }
+
+    public function test_payload_sqli_union(): void
+    {
+        $d = $this->makeDetector();
+        $this->assertSame('sqli_union', $d->detectPayload("1 UNION SELECT * FROM users"));
+    }
+
+    public function test_payload_xss_script(): void
+    {
+        $d = $this->makeDetector();
+        $this->assertNotNull($d->detectPayload('<script>alert(1)</script>'));
+    }
+
+    public function test_payload_path_traversal(): void
+    {
+        $d = $this->makeDetector();
+        $this->assertSame('traversal', $d->detectPayload('../../etc/passwd'));
+    }
+
+    public function test_clean_payload_passes(): void
+    {
+        $d = $this->makeDetector();
+        $this->assertNull($d->detectPayload('Hello World, this is a normal search query'));
+    }
+
+    public function test_add_custom_payload(): void
+    {
+        $d = $this->makeDetector();
+        $d->addPayload('/CUSTOM_ATTACK/i', 'my_attack');
+        $this->assertSame('my_attack', $d->detectPayload('CUSTOM_ATTACK payload'));
+    }
+
+    public function test_remove_payload(): void
+    {
+        $d = $this->makeDetector();
+        $d->removePayload('sqli_union');
+        // 'UNION SELECT' matches only sqli_union — no other pattern fires on this input
+        $this->assertNull($d->detectPayload('1 UNION SELECT id'));
+    }
+
+    // =========================================================================
+    // RateLimiter Tests
+    // =========================================================================
+
+    public function test_rate_limit_not_exceeded(): void
+    {
+        $rl = new RateLimiter($this->storage, 10, 60);
+        for ($i = 0; $i < 5; $i++) {
+            $exceeded = $rl->isExceeded('30.0.0.1');
+        }
+        $this->assertFalse($exceeded);
+    }
+
+    public function test_rate_limit_exceeded(): void
+    {
+        $rl = new RateLimiter($this->storage, 3, 60);
+        $exceeded = false;
+        for ($i = 0; $i < 10; $i++) {
+            $exceeded = $rl->isExceeded('30.0.0.2');
+        }
+        $this->assertTrue($exceeded);
+    }
+
+    // =========================================================================
+    // RuleEngine Tests
+    // =========================================================================
+
+    public function test_rule_engine_pass(): void
+    {
+        $engine = new RuleEngine();
+        $engine->add('always-pass', fn($r) => RuleResult::pass());
+
+        // Simulate request
+        $_SERVER['REMOTE_ADDR']     = '1.1.1.1';
+        $_SERVER['REQUEST_URI']     = '/';
+        $_SERVER['REQUEST_METHOD']  = 'GET';
+        $_SERVER['HTTP_USER_AGENT'] = 'Test';
+        $req = new Request();
+
+        $result = $engine->evaluate($req);
+        $this->assertTrue($result->isPass());
+    }
+
+    public function test_rule_engine_block(): void
+    {
+        $engine = new RuleEngine();
+        $engine->add('always-block', fn($r) => RuleResult::block('testing'));
+
+        $_SERVER['REMOTE_ADDR']     = '1.1.1.1';
+        $_SERVER['REQUEST_URI']     = '/';
+        $_SERVER['REQUEST_METHOD']  = 'GET';
+        $_SERVER['HTTP_USER_AGENT'] = 'Test';
+        $req = new Request();
+
+        $result = $engine->evaluate($req);
+        $this->assertTrue($result->isBlock());
+        $this->assertSame('testing', $result->reason);
+    }
+
+    public function test_rule_engine_disable(): void
+    {
+        $engine = new RuleEngine();
+        $engine->add('will-be-disabled', fn($r) => RuleResult::block('disabled'));
+        $engine->disable('will-be-disabled');
+
+        $_SERVER['REMOTE_ADDR']     = '1.1.1.1';
+        $_SERVER['REQUEST_URI']     = '/';
+        $_SERVER['REQUEST_METHOD']  = 'GET';
+        $_SERVER['HTTP_USER_AGENT'] = 'Test';
+        $req = new Request();
+
+        $result = $engine->evaluate($req);
+        $this->assertTrue($result->isPass());
+    }
+
+    public function test_rule_priority(): void
+    {
+        $log = [];
+        $engine = new RuleEngine();
+        $engine->add('low-priority',  function($r) use (&$log) { $log[] = 'low';  return RuleResult::pass(); }, 100);
+        $engine->add('high-priority', function($r) use (&$log) { $log[] = 'high'; return RuleResult::pass(); }, 1);
+
+        $_SERVER['REMOTE_ADDR']     = '1.1.1.1';
+        $_SERVER['REQUEST_URI']     = '/';
+        $_SERVER['REQUEST_METHOD']  = 'GET';
+        $_SERVER['HTTP_USER_AGENT'] = 'Test';
+        $req = new Request();
+
+        $engine->evaluate($req);
+        $this->assertSame(['high', 'low'], $log);
+    }
+
+    // =========================================================================
+    // ApacheBlocker Tests
+    // =========================================================================
+
+    public function test_apache_blocker_creates_block(): void
+    {
+        $htFile = $this->tmpDir . '/.htaccess';
+        touch($htFile);
+
+        $blocker = new ApacheBlocker($htFile);
+        $blocker->sync(['1.2.3.4', '5.6.7.8']);
+
+        $content = file_get_contents($htFile);
+        $this->assertStringContainsString('Require not ip 1.2.3.4', $content);
+        $this->assertStringContainsString('Require not ip 5.6.7.8', $content);
+        $this->assertStringContainsString('xZeroProtect:start', $content);
+        $this->assertStringContainsString('xZeroProtect:end', $content);
+    }
+
+    public function test_apache_blocker_single_block(): void
+    {
+        $htFile = $this->tmpDir . '/.htaccess';
+        touch($htFile);
+
+        $blocker = new ApacheBlocker($htFile);
+        $blocker->block('9.9.9.9');
+
+        $content = file_get_contents($htFile);
+        $this->assertStringContainsString('Require not ip 9.9.9.9', $content);
+    }
+
+    public function test_apache_blocker_unblock(): void
+    {
+        $htFile = $this->tmpDir . '/.htaccess';
+        touch($htFile);
+
+        $blocker = new ApacheBlocker($htFile);
+        $blocker->sync(['1.1.1.1', '2.2.2.2']);
+        $blocker->unblock('1.1.1.1');
+
+        $content = file_get_contents($htFile);
+        $this->assertStringNotContainsString('Require not ip 1.1.1.1', $content);
+        $this->assertStringContainsString('Require not ip 2.2.2.2', $content);
+    }
+
+    public function test_apache_blocker_clear(): void
+    {
+        $htFile = $this->tmpDir . '/.htaccess';
+        touch($htFile);
+
+        $blocker = new ApacheBlocker($htFile);
+        $blocker->sync(['1.1.1.1']);
+        $blocker->clear();
+
+        $content = file_get_contents($htFile);
+        $this->assertStringNotContainsString('xZeroProtect:start', $content);
+    }
+
+    public function test_apache_blocker_does_not_duplicate(): void
+    {
+        $htFile = $this->tmpDir . '/.htaccess';
+        touch($htFile);
+
+        $blocker = new ApacheBlocker($htFile);
+        $blocker->sync(['1.1.1.1']);
+        $blocker->sync(['1.1.1.1', '2.2.2.2']);
+
+        $content = file_get_contents($htFile);
+        // Should only appear once
+        $this->assertSame(1, substr_count($content, 'xZeroProtect:start'));
+    }
+
+    // =========================================================================
+    // Logger Tests
+    // =========================================================================
+
+    public function test_logger_writes_and_reads(): void
+    {
+        $logger = new Logger($this->storage);
+
+        $_SERVER['REMOTE_ADDR']     = '4.4.4.4';
+        $_SERVER['REQUEST_URI']     = '/attack';
+        $_SERVER['REQUEST_METHOD']  = 'GET';
+        $_SERVER['HTTP_USER_AGENT'] = 'nikto';
+        $req = new Request();
+
+        $logger->log('user_agent', $req, 'nikto detected');
+        $logs = $logger->recent(5);
+        $this->assertNotEmpty($logs);
+        $this->assertStringContainsString('4.4.4.4', $logs[0]);
+    }
+
+    public function test_logger_disabled_writes_nothing(): void
+    {
+        $logger = new Logger($this->storage, enabled: false);
+
+        $_SERVER['REMOTE_ADDR']     = '5.5.5.5';
+        $_SERVER['REQUEST_URI']     = '/x';
+        $_SERVER['REQUEST_METHOD']  = 'GET';
+        $_SERVER['HTTP_USER_AGENT'] = 'test';
+        $req = new Request();
+
+        $logger->log('test', $req, 'reason');
+        $logs = $logger->recent(5);
+        $this->assertEmpty($logs);
+    }
+
+    // =========================================================================
+    // DeviceInfo Tests
+    // =========================================================================
+
+    public function test_device_detects_chrome_on_windows(): void
+    {
+        $d = new DeviceInfo('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+        $this->assertSame('Chrome', $d->browser);
+        $this->assertSame('124.0.0.0', $d->browserVersion);
+        $this->assertSame('Windows', $d->os);
+        $this->assertSame('10/11', $d->osVersion);
+        $this->assertSame('desktop', $d->type);
+        $this->assertTrue($d->isDesktop);
+        $this->assertFalse($d->isMobile);
+        $this->assertFalse($d->isTablet);
+    }
+
+    public function test_device_detects_safari_on_iphone(): void
+    {
+        $d = new DeviceInfo('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1');
+        $this->assertSame('Safari', $d->browser);
+        $this->assertSame('iOS', $d->os);
+        $this->assertSame('17.0', $d->osVersion);
+        $this->assertSame('mobile', $d->type);
+        $this->assertTrue($d->isMobile);
+        $this->assertFalse($d->isDesktop);
+    }
+
+    public function test_device_detects_firefox_on_linux(): void
+    {
+        $d = new DeviceInfo('Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0');
+        $this->assertSame('Firefox', $d->browser);
+        $this->assertSame('124.0', $d->browserVersion);
+        $this->assertSame('Linux', $d->os);
+        $this->assertSame('desktop', $d->type);
+    }
+
+    public function test_device_detects_edge(): void
+    {
+        $d = new DeviceInfo('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0');
+        $this->assertSame('Edge', $d->browser);
+    }
+
+    public function test_device_detects_android_tablet(): void
+    {
+        $d = new DeviceInfo('Mozilla/5.0 (Linux; Android 13; SM-T870) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36');
+        $this->assertSame('Android', $d->os);
+        $this->assertSame('tablet', $d->type);
+        $this->assertTrue($d->isTablet);
+    }
+
+    public function test_device_unknown_agent(): void
+    {
+        $d = new DeviceInfo('SomeObscureClient/1.0');
+        $this->assertSame('Unknown', $d->browser);
+        $this->assertSame('Unknown', $d->os);
+        $this->assertSame('desktop', $d->type); // fallback
+    }
+
+    // =========================================================================
+    // VisitInfo & Visitor Tracking Tests
+    // =========================================================================
+
+    private function makeRequest(string $ip, string $ua, string $uri = '/'): Request
+    {
+        $_SERVER['REMOTE_ADDR']     = $ip;
+        $_SERVER['REQUEST_URI']     = $uri;
+        $_SERVER['REQUEST_METHOD']  = 'GET';
+        $_SERVER['HTTP_USER_AGENT'] = $ua;
+        $_SERVER['HTTP_REFERER']    = '';
+        return new Request();
+    }
+
+    public function test_visit_info_properties_populated(): void
+    {
+        $req   = $this->makeRequest('1.2.3.4', 'Mozilla/5.0 (Windows NT 10.0) Chrome/124.0', '/about');
+        $visit = new VisitInfo($req);
+
+        $this->assertSame('1.2.3.4', $visit->ip);
+        $this->assertSame('/about', $visit->uri);
+        $this->assertSame('/about', $visit->path);
+        $this->assertSame('GET', $visit->method);
+        $this->assertInstanceOf(DeviceInfo::class, $visit->device);
+        $this->assertNotEmpty($visit->fingerprint);
+        $this->assertIsInt($visit->timestamp);
+    }
+
+    public function test_visit_info_to_array_has_all_keys(): void
+    {
+        $req   = $this->makeRequest('1.2.3.4', 'Mozilla/5.0 Chrome/124.0');
+        $visit = new VisitInfo($req);
+        $arr   = $visit->toArray();
+
+        foreach (['ip', 'uri', 'path', 'method', 'user_agent', 'referer',
+                  'timestamp', 'fingerprint', 'browser', 'browser_ver',
+                  'os', 'os_ver', 'device_type', 'is_mobile', 'is_tablet', 'is_desktop'] as $key) {
+            $this->assertArrayHasKey($key, $arr, "Missing key: $key");
+        }
+    }
+
+    public function test_visit_info_date_format(): void
+    {
+        $req   = $this->makeRequest('1.2.3.4', 'Mozilla/5.0');
+        $visit = new VisitInfo($req);
+
+        $this->assertMatchesRegularExpression(
+            '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/',
+            $visit->date()
+        );
+    }
+
+    // --- Unique visitor / fingerprint ---
+
+    public function test_same_visitor_same_day_gets_same_fingerprint(): void
+    {
+        $ua  = 'Mozilla/5.0 (Windows NT 10.0) Chrome/124.0';
+        $req = $this->makeRequest('10.0.0.1', $ua);
+
+        $visit1 = new VisitInfo($req);
+        $visit2 = new VisitInfo($req);
+
+        $this->assertSame($visit1->fingerprint, $visit2->fingerprint);
+    }
+
+    public function test_different_ip_gets_different_fingerprint(): void
+    {
+        $ua = 'Mozilla/5.0 (Windows NT 10.0) Chrome/124.0';
+
+        $visit1 = new VisitInfo($this->makeRequest('10.0.0.1', $ua));
+        $visit2 = new VisitInfo($this->makeRequest('10.0.0.2', $ua));
+
+        $this->assertNotSame($visit1->fingerprint, $visit2->fingerprint);
+    }
+
+    public function test_different_user_agent_gets_different_fingerprint(): void
+    {
+        $visit1 = new VisitInfo($this->makeRequest('10.0.0.1', 'Mozilla/5.0 Chrome/124.0'));
+        $visit2 = new VisitInfo($this->makeRequest('10.0.0.1', 'Mozilla/5.0 Firefox/124.0'));
+
+        $this->assertNotSame($visit1->fingerprint, $visit2->fingerprint);
+    }
+
+    public function test_fingerprint_is_sha256_hex_string(): void
+    {
+        $req   = $this->makeRequest('1.2.3.4', 'Mozilla/5.0');
+        $visit = new VisitInfo($req);
+
+        // SHA-256 → 64 hex characters
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $visit->fingerprint);
+    }
+
+    public function test_fingerprint_does_not_contain_raw_ip(): void
+    {
+        $req   = $this->makeRequest('192.168.1.100', 'Mozilla/5.0');
+        $visit = new VisitInfo($req);
+
+        // Fingerprint must be a hash — the raw IP must not appear in it
+        $this->assertStringNotContainsString('192.168.1.100', $visit->fingerprint);
+    }
+
+    // =========================================================================
+    // Request — IP resolution Tests
+    // =========================================================================
+
+    public function test_default_ip_resolution_uses_remote_addr(): void
+    {
+        $_SERVER['REMOTE_ADDR']      = '203.0.113.10';
+        $_SERVER['HTTP_CF_CONNECTING_IP'] = '198.51.100.5'; // should be ignored
+        $_SERVER['REQUEST_URI']      = '/';
+        $_SERVER['REQUEST_METHOD']   = 'GET';
+        $_SERVER['HTTP_USER_AGENT']  = 'Test';
+
+        $req = new Request(); // no trusted proxies configured
+
+        $this->assertSame('203.0.113.10', $req->ip);
+    }
+
+    public function test_trusted_proxy_uses_cf_connecting_ip(): void
+    {
+        $_SERVER['REMOTE_ADDR']           = '173.245.48.1'; // Cloudflare edge IP
+        $_SERVER['HTTP_CF_CONNECTING_IP'] = '198.51.100.5'; // real visitor
+        $_SERVER['REQUEST_URI']           = '/';
+        $_SERVER['REQUEST_METHOD']        = 'GET';
+        $_SERVER['HTTP_USER_AGENT']       = 'Test';
+
+        $req = new Request(['173.245.48.0/20']);
+
+        $this->assertSame('198.51.100.5', $req->ip);
+    }
+
+    public function test_untrusted_remote_addr_ignores_proxy_headers(): void
+    {
+        $_SERVER['REMOTE_ADDR']           = '203.0.113.10'; // not in trusted list
+        $_SERVER['HTTP_CF_CONNECTING_IP'] = '198.51.100.5'; // attacker-supplied, must be ignored
+        $_SERVER['REQUEST_URI']           = '/';
+        $_SERVER['REQUEST_METHOD']        = 'GET';
+        $_SERVER['HTTP_USER_AGENT']       = 'Test';
+
+        $req = new Request(['173.245.48.0/20']);
+
+        $this->assertSame('203.0.113.10', $req->ip);
+    }
+
+    public function test_x_forwarded_for_takes_left_most_valid_ip(): void
+    {
+        $_SERVER['REMOTE_ADDR']         = '10.0.0.1';
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.7, 10.0.0.1';
+        $_SERVER['REQUEST_URI']          = '/';
+        $_SERVER['REQUEST_METHOD']       = 'GET';
+        $_SERVER['HTTP_USER_AGENT']      = 'Test';
+
+        $req = new Request(['10.0.0.0/8']);
+
+        $this->assertSame('198.51.100.7', $req->ip);
+    }
+
+    public function test_wildcard_trusted_proxy_trusts_any_remote_addr(): void
+    {
+        $_SERVER['REMOTE_ADDR']           = '203.0.113.99';
+        $_SERVER['HTTP_CF_CONNECTING_IP'] = '198.51.100.5';
+        $_SERVER['REQUEST_URI']           = '/';
+        $_SERVER['REQUEST_METHOD']        = 'GET';
+        $_SERVER['HTTP_USER_AGENT']       = 'Test';
+
+        $req = new Request(['*']);
+
+        $this->assertSame('198.51.100.5', $req->ip);
+    }
+
+    public function test_falls_back_to_remote_addr_when_proxy_header_invalid(): void
+    {
+        $_SERVER['REMOTE_ADDR']           = '173.245.48.1';
+        $_SERVER['HTTP_CF_CONNECTING_IP'] = 'not-an-ip';
+        $_SERVER['REQUEST_URI']           = '/';
+        $_SERVER['REQUEST_METHOD']        = 'GET';
+        $_SERVER['HTTP_USER_AGENT']       = 'Test';
+
+        $req = new Request(['173.245.48.0/20']);
+
+        $this->assertSame('173.245.48.1', $req->ip);
+    }
+
+    public function test_trusted_proxy_ipv6_exact_match_different_notation(): void
+    {
+        // REMOTE_ADDR (expanded form) and trusted entry (compact form) are the
+        // same address written differently — must still be trusted.
+        $_SERVER['REMOTE_ADDR']           = '2001:0db8:0000:0000:0000:0000:0000:0001';
+        $_SERVER['HTTP_CF_CONNECTING_IP'] = '198.51.100.5';
+        $_SERVER['REQUEST_URI']           = '/';
+        $_SERVER['REQUEST_METHOD']        = 'GET';
+        $_SERVER['HTTP_USER_AGENT']       = 'Test';
+
+        $req = new Request(['2001:db8::1']);
+
+        $this->assertSame('198.51.100.5', $req->ip);
+    }
+
+    // =========================================================================
+    // Helpers
+    // =========================================================================
+
+    private function removeDir(string $path): void
+    {
+        if (!is_dir($path)) return;
+        foreach (scandir($path) as $item) {
+            if ($item === '.' || $item === '..') continue;
+            $full = $path . '/' . $item;
+            is_dir($full) ? $this->removeDir($full) : unlink($full);
+        }
+        rmdir($path);
+    }
+}

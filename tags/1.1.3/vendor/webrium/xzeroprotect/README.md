@@ -1,0 +1,648 @@
+<div align="center">
+
+<br/>
+
+```
+██╗  ██╗███████╗███████╗██████╗  ██████╗ ██████╗ ██████╗  ██████╗ ████████╗███████╗ ██████╗████████╗
+╚██╗██╔╝╚══███╔╝██╔════╝██╔══██╗██╔═══██╗██╔══██╗██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██╔════╝╚══██╔══╝
+ ╚███╔╝   ███╔╝ █████╗  ██████╔╝██║   ██║██████╔╝██████╔╝██║   ██║   ██║   █████╗  ██║        ██║   
+ ██╔██╗  ███╔╝  ██╔══╝  ██╔══██╗██║   ██║██╔═══╝ ██╔══██╗██║   ██║   ██║   ██╔══╝  ██║        ██║   
+██╔╝ ██╗███████╗███████╗██║  ██║╚██████╔╝██║      ██║  ██║╚██████╔╝   ██║   ███████╗╚██████╗   ██║   
+╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚═╝  ╚═╝ ╚═════╝    ╚═╝   ╚══════╝ ╚═════╝   ╚═╝   
+```
+
+**A lightweight, file-based PHP firewall for the modern web.**  
+No database. No external services. No compromises.
+
+<br/>
+
+[![PHP](https://img.shields.io/badge/PHP-%3E%3D%208.0-8892BF?style=flat-square&logo=php&logoColor=white)](https://php.net)
+[![Composer](https://img.shields.io/badge/Composer-webrium%2Fxzeroprotect-885630?style=flat-square&logo=composer&logoColor=white)](https://packagist.org/packages/webrium/xzeroprotect)
+[![License](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](LICENSE)
+[![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero-f59e0b?style=flat-square)]()
+
+<br/>
+
+</div>
+
+---
+
+## Why xZeroProtect?
+
+Every day, bots crawl your application looking for exposed `.env` files, WordPress admin panels, SQL injection vectors, and known CVEs — even if you're not running WordPress. xZeroProtect stops them at the PHP layer with zero external dependencies, no database connection, and a clean API you can tune in minutes.
+
+- **File-based** — everything stored on disk; no MySQL, Redis, or memcached required
+- **Zero dependencies** — pure PHP 8.0+, nothing else
+- **Composable** — enable, disable, or extend every detection module independently
+- **Learning mode** — log threats without blocking, perfect for tuning before going live
+- **Apache-aware** — optionally write permanent bans into `.htaccess` so Apache rejects them before PHP even starts
+
+---
+
+## Installation
+
+```bash
+composer require webrium/xzeroprotect
+```
+
+---
+
+## Quick Start
+
+Add these two lines at the very top of your `index.php` or bootstrap file:
+
+```php
+<?php
+require 'vendor/autoload.php';
+
+use Webrium\XZeroProtect\XZeroProtect;
+
+XZeroProtect::init()->run();
+```
+
+That's it. Default rules are active immediately.
+
+> **Note:** `init()` stores the instance internally. You can retrieve it from anywhere in your application using `XZeroProtect::getInstance()` — no need to pass `$firewall` around.
+
+---
+
+## Configuration
+
+Every option has a sensible default. Override only what you need:
+
+```php
+$firewall = XZeroProtect::init([
+
+    // 'production' → block & log  |  'learning' → log only  |  'off' → disabled
+    'mode'         => 'production',
+
+    // Where ban files, rate data, and logs are stored
+    'storage_path' => __DIR__ . '/storage/firewall',
+
+    // --- Rate limiting ---
+    'rate_limit' => [
+        'enabled'      => true,
+        'max_requests' => 60,   // requests per window
+        'per_seconds'  => 60,   // window size in seconds
+    ],
+
+    // --- Automatic banning ---
+    'auto_ban' => [
+        'enabled'              => true,
+        'violations_threshold' => 10,     // violations before a ban is issued
+        'ban_duration'         => 86400,  // ban length in seconds (24 h)
+        'permanent_after_bans' => 3,      // escalate to permanent after N bans
+    ],
+
+    // --- Apache integration ---
+    'apache_blocking' => false,
+    'htaccess_path'   => __DIR__ . '/.htaccess',
+
+    // --- Reverse proxies / CDNs (e.g. Cloudflare, Nginx, load balancers) ---
+    // Leave empty to always use REMOTE_ADDR (safest if the server is
+    // reachable directly). Add proxy IPs/CIDRs to read the real client IP
+    // from CF-Connecting-IP / True-Client-IP / X-Real-IP / X-Forwarded-For
+    // when the request comes from one of these proxies. Use ['*'] to trust
+    // these headers regardless of REMOTE_ADDR (only if the server is NOT
+    // directly reachable).
+    'trusted_proxies' => [],
+
+    // --- Always-allow list ---
+    'whitelist' => [
+        'ips'   => ['127.0.0.1', '10.0.0.0/8'],
+        'paths' => ['/health', '/ping'],
+    ],
+
+    // --- Response sent to blocked clients ---
+    'block_response' => [
+        'code'    => 403,
+        'message' => 'Access Denied',
+    ],
+
+    // --- Toggle individual detection modules ---
+    'checks' => [
+        'crawler_check' => true,   // exempt verified crawlers from all checks
+        'rate_limit'    => true,
+        'blocked_path'  => true,
+        'user_agent'    => true,
+        'payload'       => true,
+        'custom_rules'  => true,
+    ],
+
+    // --- Log settings ---
+    'log' => [
+        'enabled'       => true,
+        'max_file_size' => 10,   // MB — auto-rotated when exceeded
+        'keep_days'     => 30,
+    ],
+
+]);
+
+$firewall->run();
+```
+
+---
+
+## Detection Modules
+
+### Path Detection
+
+Blocks requests targeting sensitive or non-existent paths. Because a modern routed PHP app has no `.php` files in the URL, you can add that pattern to immediately reject the flood of `index.php?id=` scanner probes.
+
+```php
+// Add individual patterns
+$firewall->patterns->addPath('.php');
+$firewall->patterns->addPath('/control-panel');
+
+// Add many at once
+$firewall->patterns->addPaths(['.asp', '.jsp', '/backup', '/staging']);
+
+// Remove a default pattern you want to allow
+$firewall->patterns->removePath('xmlrpc');
+```
+
+<details>
+<summary>View all default blocked paths</summary>
+
+| Category | Patterns |
+|----------|----------|
+| CMS panels | `wp-admin`, `wp-login`, `wp-config`, `xmlrpc`, `administrator`, `typo3` |
+| Config exposure | `.env`, `.git`, `.svn`, `.htaccess`, `.htpasswd`, `web.config` |
+| DB tools | `phpmyadmin`, `pma`, `adminer`, `dbadmin` |
+| Dangerous files | `.sql`, `.bak`, `.backup`, `.old`, `dump.sql` |
+| Path traversal | `../`, `..%2f`, `%2e%2e` |
+| Web shells | `shell.php`, `c99.php`, `r57.php`, `webshell` |
+| Script extensions | `.asp`, `.aspx`, `.jsp`, `.cfm`, `.cgi` |
+| Info disclosure | `phpinfo`, `server-status`, `server-info` |
+| Install artifacts | `setup.php`, `install.php`, `readme.html` |
+
+> **Note:** `.php` is **not** blocked by default to avoid false positives on applications that serve raw PHP files. Add it explicitly if your app uses modern routing: `$firewall->patterns->addPath('.php')`
+
+</details>
+
+---
+
+### User-Agent Detection
+
+Identifies and blocks known scanner, brute-force, and exploit tool signatures. Empty User-Agent strings are treated as suspicious by default.
+
+```php
+$firewall->patterns->addAgent('custom-bad-bot');
+$firewall->patterns->removeAgent('curl'); // allow curl if your API clients use it
+```
+
+<details>
+<summary>View default blocked agents</summary>
+
+`sqlmap` · `nikto` · `nessus` · `acunetix` · `netsparker` · `masscan` · `nmap` · `zgrab` · `dirbuster` · `gobuster` · `feroxbuster` · `wfuzz` · `ffuf` · `hydra` · `metasploit` · `semrushbot` · `ahrefsbot` · `libwww-perl` · and more
+
+> **Note:** `curl`, `wget`, `python-requests`, and `go-http-client` are **not** blocked by default because they are also used by legitimate API clients. Add them explicitly if needed:
+> ```php
+> $firewall->patterns->addAgent('curl/');
+> $firewall->patterns->addAgent('wget/');
+> $firewall->patterns->addAgent('python-requests');
+> $firewall->patterns->addAgent('go-http-client');
+> ```
+
+</details>
+
+---
+
+### Payload Detection
+
+Scans GET parameters, POST body, raw input, and cookies for attack signatures using compiled regular expressions.
+
+```php
+// Add a custom pattern
+$firewall->patterns->addPayload('/CUSTOM_EXPLOIT/i', 'my_label');
+
+// Remove a built-in pattern
+$firewall->patterns->removePayload('sqli_union');
+```
+
+<details>
+<summary>View default payload rules</summary>
+
+| Label | Detects |
+|-------|---------|
+| `sqli_union` | `UNION [ALL] SELECT` |
+| `sqli_select` | `SELECT ... FROM` |
+| `sqli_drop` | `DROP TABLE/DATABASE` |
+| `sqli_sleep` | `SLEEP(n)` time-based blind |
+| `sqli_benchmark` | `BENCHMARK(...)` |
+| `sqli_comment` | `--`, `#`, `/* */` injection comments |
+| `xss_script` | `<script` tags |
+| `xss_onerror` | Inline event handlers (`onerror=`, `onclick=`, ...) |
+| `xss_javascript` | `javascript:` protocol |
+| `traversal` | `../` path traversal |
+| `php_exec` | `system()`, `exec()`, `shell_exec()`, ... |
+| `php_eval` | `eval(base64_decode(...))` |
+| `lfi` | `/etc/passwd`, `/etc/shadow` |
+| `rfi` | Remote file inclusion URLs |
+| `cmd_injection` | Shell metacharacters + commands |
+
+</details>
+
+---
+
+### Rate Limiting
+
+Sliding-window counter stored per-IP on disk. No Redis required.
+
+```php
+$firewall = XZeroProtect::init([
+    'rate_limit' => [
+        'max_requests' => 30,
+        'per_seconds'  => 10,
+    ],
+]);
+```
+
+---
+
+## Crawler Detection
+
+Trusted web crawlers (Googlebot, Bingbot, and others) are identified and exempted from all firewall checks — including rate limiting and auto-ban. This prevents legitimate bots from being accidentally blocked.
+
+For crawlers like Googlebot and Bingbot, identity is confirmed via **double-DNS verification** before granting trust:
+
+1. Resolve the visitor IP to a hostname via reverse DNS
+2. Confirm the hostname ends with the expected suffix (e.g. `.googlebot.com`)
+3. Re-resolve that hostname back to an IP
+4. Confirm the re-resolved IP matches the original visitor IP
+
+This is the verification method recommended by Google and Bing in their official documentation. Anyone can fake a User-Agent — DNS cannot be faked.
+
+Social crawlers (Twitterbot, LinkedInBot, Slackbot, etc.) are trusted by User-Agent only, as they do not publish verifiable IP ranges or rDNS suffixes.
+
+```php
+// Add a custom trusted crawler
+$firewall->crawlers->addCrawler(
+    name: 'MyCrawler',
+    uaContains: 'mycrawlerbot',
+    verifyRdns: false
+);
+
+// Remove a crawler from the trusted list
+$firewall->crawlers->removeCrawler('Googlebot');
+
+// Disable crawler detection entirely
+$firewall->disableCheck('crawler_check');
+```
+
+<details>
+<summary>View default trusted crawlers</summary>
+
+| Crawler | UA contains | DNS verified |
+|---------|-------------|:------------:|
+| Googlebot | `googlebot` | ✅ `.googlebot.com` |
+| Google Other | `google` | ✅ `.google.com` |
+| Bingbot | `bingbot` | ✅ `.search.msn.com` |
+| Yahoo Slurp | `yahoo! slurp` | ✅ `.crawl.yahoo.net` |
+| DuckDuckBot | `duckduckbot` | — |
+| Yandex | `yandexbot` | ✅ `.yandex.com` |
+| Baidu | `baiduspider` | ✅ `.baidu.com` |
+| Applebot | `applebot` | ✅ `.applebot.apple.com` |
+| Facebook | `facebookexternalhit` | ✅ `.facebook.com` |
+| Twitterbot | `twitterbot` | — |
+| LinkedInBot | `linkedinbot` | — |
+| WhatsApp | `whatsapp` | — |
+| Telegram | `telegrambot` | — |
+| Slackbot | `slackbot` | — |
+| Discordbot | `discordbot` | — |
+| Uptimerobot | `uptimerobot` | — |
+| Pingdom | `pingdom` | — |
+
+</details>
+
+---
+
+## IP Management
+
+```php
+// Temporary ban (24 h default)
+$firewall->ip->ban('1.2.3.4');
+$firewall->ip->ban('1.2.3.4', reason: 'manual review', duration: 3600);
+
+// Permanent ban
+$firewall->ip->banPermanent('1.2.3.4', reason: 'confirmed attacker');
+
+// Remove a ban
+$firewall->ip->unban('1.2.3.4');
+
+// Inspect
+$firewall->ip->isBanned('1.2.3.4');    // bool
+$firewall->ip->getBanInfo('1.2.3.4');  // array|null  { ip, reason, banned_at, expires, bans_count }
+$firewall->ip->getAllBans();            // array of all active bans
+
+// Whitelist — supports exact IPs and CIDR notation (IPv4 & IPv6)
+$firewall->ip->whitelist('10.0.0.0/8');
+$firewall->ip->whitelist('2001:db8::/32');
+```
+
+---
+
+## Custom Rules
+
+Register your own logic as first-class firewall rules with full access to the request object.
+
+```php
+use Webrium\XZeroProtect\RuleResult;
+
+// Block requests with a .php extension (for fully-routed apps)
+$firewall->rules->add('no-php-extension', function ($request) {
+    if (str_ends_with($request->path(), '.php')) {
+        return RuleResult::block('PHP extension not valid on this server');
+    }
+    return RuleResult::pass();
+});
+
+// Log suspicious POST requests without logging a violation
+$firewall->rules->add('post-no-referer', function ($request) {
+    if ($request->method === 'POST' && empty($request->referer)) {
+        return RuleResult::log('POST without Referer header');
+    }
+    return RuleResult::pass();
+}, priority: 10);  // lower = runs first
+
+// Manage rules at runtime
+$firewall->rules->disable('no-php-extension');
+$firewall->rules->enable('no-php-extension');
+$firewall->rules->remove('no-php-extension');
+```
+
+**`RuleResult` options:**
+
+| Method | Effect |
+|--------|--------|
+| `RuleResult::pass()` | Allow the request, continue checking |
+| `RuleResult::block(reason: '...')` | Block immediately and log |
+| `RuleResult::log(reason: '...')` | Log without blocking |
+
+---
+
+## Apache Integration
+
+When `apache_blocking` is enabled, permanently banned IPs are written to `.htaccess`. Apache drops those connections before PHP starts — zero PHP overhead for known bad actors.
+
+```php
+$firewall = XZeroProtect::init([
+    'apache_blocking' => true,
+    'htaccess_path'   => __DIR__ . '/.htaccess',
+]);
+
+// Sync all current permanent bans to .htaccess
+$firewall->apache->sync(array_keys($firewall->ip->getAllBans()));
+
+// Block/unblock a single IP in .htaccess
+$firewall->apache->block('5.6.7.8');
+$firewall->apache->unblock('5.6.7.8');
+```
+
+Generated `.htaccess` block:
+
+```apache
+# xZeroProtect:start
+# Auto-generated by xZeroProtect — do not edit this block manually
+<RequireAll>
+    Require all granted
+    Require not ip 1.2.3.4
+    Require not ip 5.6.7.8
+</RequireAll>
+# xZeroProtect:end
+```
+
+---
+
+## Logging
+
+```php
+// Read the most recent attack entries (newest first)
+$logs = $firewall->logger->recent(limit: 100);
+
+// Clean up rotated backup log files older than retention period
+$firewall->logger->cleanup();
+```
+
+### Accessing the firewall from outside bootstrap
+
+Because `init()` stores the instance as a singleton, you can retrieve it from any controller, admin panel, or CLI script without passing `$firewall` as a variable:
+
+```php
+use Webrium\XZeroProtect\XZeroProtect;
+
+// In bootstrap / index.php
+XZeroProtect::init()->run();
+
+// ---
+
+// In any other file (e.g. admin panel, dashboard controller)
+$firewall = XZeroProtect::getInstance();
+
+$logs    = $firewall->logger->recent(limit: 100);
+$bans    = $firewall->ip->getAllBans();
+$isBanned = $firewall->ip->isBanned('1.2.3.4');
+```
+
+If `getInstance()` is called before `init()`, it throws a clear `RuntimeException`:
+
+```
+xZeroProtect has not been initialized. Call XZeroProtect::init() first.
+```
+
+Log entries are plain-text, one per line:
+
+```
+2024-11-15 14:32:01 | ip=185.220.101.5 | type=sqli_union | uri=/search?q=1+UNION+SELECT | reason=Payload match: sqli_union | ua=sqlmap/1.7
+```
+
+---
+
+## Disabling Individual Checks
+
+```php
+// At init time
+XZeroProtect::init([
+    'checks' => [
+        'user_agent' => false,  // disable UA checking for this app
+    ],
+]);
+
+// Or at runtime
+$firewall->disableCheck('user_agent');
+$firewall->enableCheck('user_agent');
+```
+
+Available check keys: `crawler_check` · `rate_limit` · `blocked_path` · `user_agent` · `payload` · `custom_rules`
+
+---
+
+## Learning Mode
+
+Deploy in learning mode first. All attacks are logged but nothing is blocked. Review the logs, tune your rules, then switch to production.
+
+```php
+// During tuning
+XZeroProtect::init(['mode' => 'learning'])->run();
+
+// Once satisfied
+XZeroProtect::init(['mode' => 'production'])->run();
+```
+
+---
+
+## Visitor Tracking
+
+After all firewall checks pass, xZeroProtect can record verified real visits — bots, scanners, and suspicious requests are already filtered out before this runs.
+
+Tracking is **opt-in** and **disabled by default**. Enable it by passing a closure to `enableTracking()` before calling `run()`. The closure receives a `VisitInfo` object; how you store the data is entirely up to you.
+
+```php
+use Webrium\XZeroProtect\XZeroProtect;
+use Webrium\XZeroProtect\VisitInfo;
+
+$firewall = XZeroProtect::init();
+
+$firewall->enableTracking(function (VisitInfo $visit) {
+    // Store in your database however you like
+    $pdo->prepare("
+        INSERT INTO visits
+            (ip, path, method, referer, user_agent,
+             browser, browser_version, os, os_version,
+             device_type, fingerprint, visited_at)
+        VALUES
+            (:ip, :path, :method, :referer, :user_agent,
+             :browser, :browser_ver, :os, :os_ver,
+             :device_type, :fingerprint, :visited_at)
+    ")->execute([
+        ':ip'          => $visit->ip,
+        ':path'        => $visit->path,
+        ':method'      => $visit->method,
+        ':referer'     => $visit->referer,
+        ':user_agent'  => $visit->userAgent,
+        ':browser'     => $visit->device->browser,
+        ':browser_ver' => $visit->device->browserVersion,
+        ':os'          => $visit->device->os,
+        ':os_ver'      => $visit->device->osVersion,
+        ':device_type' => $visit->device->type,
+        ':fingerprint' => $visit->fingerprint,
+        ':visited_at'  => $visit->date(),
+    ]);
+});
+
+$firewall->run();
+```
+
+### VisitInfo properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `$visit->ip` | `string` | Visitor IP address |
+| `$visit->uri` | `string` | Full URI including query string |
+| `$visit->path` | `string` | URI path without query string |
+| `$visit->method` | `string` | HTTP method (`GET`, `POST`, ...) |
+| `$visit->userAgent` | `string` | Raw User-Agent header |
+| `$visit->referer` | `string` | HTTP Referer header |
+| `$visit->timestamp` | `int` | Unix timestamp |
+| `$visit->fingerprint` | `string` | SHA-256 unique visitor identifier (see below) |
+| `$visit->device` | `DeviceInfo` | Parsed browser, OS, and device type |
+| `$visit->date()` | `string` | Formatted timestamp — default `Y-m-d H:i:s` |
+| `$visit->toArray()` | `array` | All fields as a flat array, ready for DB insert |
+
+### DeviceInfo properties
+
+Accessible via `$visit->device`:
+
+| Property | Type | Example |
+|----------|------|---------|
+| `->browser` | `string` | `Chrome`, `Firefox`, `Safari`, `Edge`, `Opera` |
+| `->browserVersion` | `string` | `124.0.0.0` |
+| `->os` | `string` | `Windows`, `macOS`, `Android`, `iOS`, `Linux` |
+| `->osVersion` | `string` | `10/11`, `17.0`, `13` |
+| `->type` | `string` | `desktop`, `mobile`, `tablet` |
+| `->isDesktop` | `bool` | `true` / `false` |
+| `->isMobile` | `bool` | `true` / `false` |
+| `->isTablet` | `bool` | `true` / `false` |
+
+### Unique visitor fingerprinting
+
+`$visit->fingerprint` is a **SHA-256 hash** of the visitor's IP, User-Agent, and the current date. This means:
+
+- The same visitor on the same day always gets the **same fingerprint** — useful for deduplicating page hits into unique daily visits.
+- The fingerprint **resets the next day** — no long-term tracking.
+- The raw IP is **never stored in the fingerprint** — it cannot be reversed.
+
+```php
+// Count only unique visitors per day
+$firewall->enableTracking(function (VisitInfo $visit) use ($pdo) {
+    $exists = $pdo->prepare("SELECT 1 FROM visits WHERE fingerprint = ? AND DATE(visited_at) = CURDATE()")
+                  ->execute([$visit->fingerprint]);
+    if (!$exists->fetchColumn()) {
+        // First visit of the day for this visitor
+        $pdo->prepare("INSERT INTO visits ...")->execute($visit->toArray());
+    }
+});
+```
+
+### Manage tracking at runtime
+
+```php
+$firewall->disableTracking();
+$firewall->isTrackingEnabled(); // bool
+```
+
+---
+
+## Architecture
+
+```
+xzeroprotect/
+├── src/
+│   ├── XZeroProtect.php      Main class & orchestrator
+│   ├── Request.php           HTTP request context
+│   ├── Storage.php           File-based persistence (bans, rate, violations, logs)
+│   ├── IPManager.php         Ban/whitelist management with CIDR support
+│   ├── PatternDetector.php   Path, User-Agent, and payload matching
+│   ├── RateLimiter.php       Sliding-window rate limiter
+│   ├── RuleEngine.php        Custom rule registration & execution
+│   ├── ApacheBlocker.php     .htaccess read/write
+│   ├── CrawlerVerifier.php   Trusted crawler detection with double-DNS
+│   ├── Logger.php            Attack logging with rotation
+│   ├── VisitInfo.php         Verified visit data object (tracking)
+│   └── DeviceInfo.php        Browser, OS, and device type parser
+├── config/
+│   └── config.php            Default configuration
+├── rules/
+│   ├── paths.php             Default blocked path patterns
+│   ├── agents.php            Default blocked User-Agent signatures
+│   ├── payloads.php          Default attack payload patterns (PCRE)
+│   └── crawlers.php          Trusted crawler definitions (UA + rDNS config)
+└── tests/
+    └── XZeroProtectTest.php  PHPUnit test suite
+```
+
+---
+
+## Running Tests
+
+```bash
+composer install
+composer test
+
+# With detailed output
+./vendor/bin/phpunit --testdox
+```
+
+---
+
+## Requirements
+
+- PHP **8.0** or higher
+- Write permission on the storage directory
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE).  
+Built by [Webrium](https://github.com/webrium).

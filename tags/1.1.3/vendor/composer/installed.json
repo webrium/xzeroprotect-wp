@@ -1,0 +1,59 @@
+{
+    "packages": [
+        {
+            "name": "webrium/xzeroprotect",
+            "version": "1.1.2",
+            "version_normalized": "1.1.2.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/webrium/xzeroprotect.git",
+                "reference": "b98e42dfaa34b3629b46d6f22f252157186fad86"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/webrium/xzeroprotect/zipball/b98e42dfaa34b3629b46d6f22f252157186fad86",
+                "reference": "b98e42dfaa34b3629b46d6f22f252157186fad86",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.0"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^10.0"
+            },
+            "time": "2026-06-13T12:37:35+00:00",
+            "type": "library",
+            "installation-source": "dist",
+            "autoload": {
+                "psr-4": {
+                    "Webrium\\XZeroProtect\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Webrium",
+                    "email": "dev@webrium.com"
+                }
+            ],
+            "description": "A lightweight, file-based PHP firewall library for protecting web applications from bots, scanners, and common attacks.",
+            "keywords": [
+                "bot-protection",
+                "firewall",
+                "php",
+                "security",
+                "waf"
+            ],
+            "support": {
+                "issues": "https://github.com/webrium/xzeroprotect/issues",
+                "source": "https://github.com/webrium/xzeroprotect/tree/1.1.2"
+            },
+            "install-path": "../webrium/xzeroprotect"
+        }
+    ],
+    "dev": true,
+    "dev-package-names": []
+}
