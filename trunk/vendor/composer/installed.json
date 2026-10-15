@@ -2,17 +2,17 @@
     "packages": [
         {
             "name": "webrium/xzeroprotect",
-            "version": "2.1.1",
-            "version_normalized": "2.1.1.0",
+            "version": "2.1.2",
+            "version_normalized": "2.1.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/webrium/xzeroprotect.git",
-                "reference": "2a23d8320ba37540482ccf0f2e2a4ed3f3d1b909"
+                "reference": "c93f914960c051d4e0fa43d04395208881e62615"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/webrium/xzeroprotect/zipball/2a23d8320ba37540482ccf0f2e2a4ed3f3d1b909",
-                "reference": "2a23d8320ba37540482ccf0f2e2a4ed3f3d1b909",
+                "url": "https://api.github.com/repos/webrium/xzeroprotect/zipball/c93f914960c051d4e0fa43d04395208881e62615",
+                "reference": "c93f914960c051d4e0fa43d04395208881e62615",
                 "shasum": ""
             },
             "require": {
@@ -21,7 +21,7 @@
             "require-dev": {
                 "phpunit/phpunit": "^10.0"
             },
-            "time": "2026-10-15T14:40:43+00:00",
+            "time": "2026-10-15T16:05:15+00:00",
             "type": "library",
             "installation-source": "dist",
             "autoload": {
@@ -49,7 +49,7 @@
             ],
             "support": {
                 "issues": "https://github.com/webrium/xzeroprotect/issues",
-                "source": "https://github.com/webrium/xzeroprotect/tree/2.1.1"
+                "source": "https://github.com/webrium/xzeroprotect/tree/2.1.2"
             },
             "install-path": "../webrium/xzeroprotect"
         }

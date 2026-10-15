@@ -3,7 +3,7 @@
         'name' => 'webrium/xzeroprotect-wp',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => 'f31999d2efbc68aba5dd8b0b68f99aaacdd395c8',
+        'reference' => 'b0abd9e1ae6f79b098bb1561eaf511bf1fd78550',
         'type' => 'wordpress-plugin',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -11,9 +11,9 @@
     ),
     'versions' => array(
         'webrium/xzeroprotect' => array(
-            'pretty_version' => '2.1.1',
-            'version' => '2.1.1.0',
-            'reference' => '2a23d8320ba37540482ccf0f2e2a4ed3f3d1b909',
+            'pretty_version' => '2.1.2',
+            'version' => '2.1.2.0',
+            'reference' => 'c93f914960c051d4e0fa43d04395208881e62615',
             'type' => 'library',
             'install_path' => __DIR__ . '/../webrium/xzeroprotect',
             'aliases' => array(),
@@ -22,7 +22,7 @@
         'webrium/xzeroprotect-wp' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => 'f31999d2efbc68aba5dd8b0b68f99aaacdd395c8',
+            'reference' => 'b0abd9e1ae6f79b098bb1561eaf511bf1fd78550',
             'type' => 'wordpress-plugin',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
