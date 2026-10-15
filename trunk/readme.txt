@@ -4,7 +4,7 @@ Tags: firewall, security, bot-protection, analytics, waf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.1.4
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -60,6 +60,11 @@ servers. All stored data is automatically deleted after the configured retention
 (default: 30 days). All data is permanently removed when the plugin is uninstalled.
 
 == Changelog ==
+
+= 1.2.0 =
+* Updated bundled xZeroProtect library from 1.1.2 to 2.1.1 — recognizes AI/LLM crawlers (GPTBot, ClaudeBot, PerplexityBot, and more) and no longer hard-blocks Semrush/Ahrefs by default.
+* Fix: Blocked Requests and Real Visitors tables were capped at a fixed page width and fixed column widths, truncating long User-Agent, URI, and Referer values even on wide screens. Tables now use the full window width and size columns from their actual content (resolves a user-reported issue).
+* Fix: the User-Agent column on the Blocked Requests page was truncated to 60 characters server-side regardless of available space; the full value is now shown.
 
 = 1.1.4 =
 * Fix: Blocked Requests page was always empty — now reads directly from the xZeroProtect library's log file, so both blocked and suspicious (Learning Mode) requests are shown.
