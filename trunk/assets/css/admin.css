@@ -25,6 +25,13 @@
     color: var(--xzp-text);
 }
 
+/* Report pages (Blocked Requests, Real Visitors) have wide tables with
+   long, variable-length content (user agents, URIs, referers) — let them
+   use the full window width instead of wasting space past 1200px. */
+.xzp-wrap--wide {
+    max-width: none;
+}
+
 /* ── Header ──────────────────────────────────────────────────────────────── */
 
 .xzp-header {
@@ -138,7 +145,30 @@
 /* ── Tables ──────────────────────────────────────────────────────────────── */
 
 .xzp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.xzp-table--full { table-layout: fixed; }
+
+/* table-layout: auto sizes each column from its own content, left to right,
+   instead of the fixed, hand-picked max-widths below — so long columns
+   (User-Agent, URI, Reason, Referer) use whatever width is actually
+   available instead of truncating while other columns sit under-filled. */
+.xzp-table--full { table-layout: auto; }
+/* Chained with .xzp-table for specificity: this must outweigh the plain
+   ".xzp-table td" rule below, regardless of source order. */
+.xzp-table.xzp-table--full td {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    word-break: break-word;
+}
+.xzp-table--full .xzp-td-path,
+.xzp-table--full .xzp-td-ua,
+.xzp-table--full .xzp-td-reason,
+.xzp-table--full .xzp-td-referer {
+    max-width: none;
+}
+/* Time stays compact and on one line — only the free-text columns above wrap. */
+.xzp-table.xzp-table--full .xzp-td-time {
+    white-space: nowrap;
+}
 .xzp-table thead tr { background: var(--xzp-bg); }
 .xzp-table th {
     padding: 10px 14px;

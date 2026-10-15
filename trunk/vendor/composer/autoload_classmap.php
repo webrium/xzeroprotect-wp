@@ -17,6 +17,7 @@ return array(
     'Webrium\\XZeroProtect\\Request' => $vendorDir . '/webrium/xzeroprotect/src/Request.php',
     'Webrium\\XZeroProtect\\RuleEngine' => $vendorDir . '/webrium/xzeroprotect/src/RuleEngine.php',
     'Webrium\\XZeroProtect\\Storage' => $vendorDir . '/webrium/xzeroprotect/src/Storage.php',
+    'Webrium\\XZeroProtect\\VisitFilter' => $vendorDir . '/webrium/xzeroprotect/src/VisitFilter.php',
     'Webrium\\XZeroProtect\\VisitInfo' => $vendorDir . '/webrium/xzeroprotect/src/VisitInfo.php',
     'Webrium\\XZeroProtect\\XZeroProtect' => $vendorDir . '/webrium/xzeroprotect/src/XZeroProtect.php',
 );

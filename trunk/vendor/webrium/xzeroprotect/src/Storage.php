@@ -16,6 +16,10 @@ class Storage
     private const DIR_RATE        = 'rate';
     private const DIR_VIOLATIONS  = 'violations';
     private const DIR_LOGS        = 'logs';
+    private const DIR_DNS         = 'dns';
+
+    // Minimum time between automatic log-cleanup runs (see dueForLogCleanup()).
+    private const LOG_CLEANUP_INTERVAL = 86400;
 
     public function __construct(string $basePath)
     {
@@ -108,20 +112,68 @@ class Storage
     // Violation tracking
     // -------------------------------------------------------------------------
 
-    public function incrementViolation(string $ip): int
+    /**
+     * Records a violation and returns the count within the rolling
+     * $decayWindow. Stored as a timestamp list, exactly like the rate
+     * limiter, so an old, unrelated blip ages out instead of counting
+     * against a client forever.
+     *
+     * $cooldown debounces repeat calls: a burst of many over-limit requests
+     * inside one legitimate page load must not, by itself, add up to an
+     * auto-ban. Pass 0 (the default) to record every call — appropriate for
+     * violation types that are each independently suspicious, such as a
+     * blocked path or a payload match. A caller that can fire many times for
+     * a single real event (rate-limit overflow during one burst) should pass
+     * a cooldown so only the first call in that span is recorded.
+     *
+     * Read, decay, and write happen under one exclusive lock — the same
+     * lost-update risk that applied to the rate counter applies here.
+     */
+    public function incrementViolation(string $ip, int $decayWindow = 3600, int $cooldown = 0): int
     {
-        $file  = $this->violationFile($ip);
-        $data  = $this->readJson($file) ?? ['count' => 0, 'first' => time()];
-        $data['count']++;
-        $data['last'] = time();
-        $this->writeJson($file, $data);
-        return $data['count'];
+        $handle = @fopen($this->violationFile($ip), 'c+');
+
+        if ($handle === false) {
+            return 0; // unwritable storage must not break the request
+        }
+
+        try {
+            flock($handle, LOCK_EX);
+
+            $timestamps = $this->decayedTimestamps($handle, $decayWindow);
+            $now        = time();
+            $last       = $timestamps === [] ? null : $timestamps[count($timestamps) - 1];
+
+            if ($cooldown <= 0 || $last === null || ($now - $last) >= $cooldown) {
+                $timestamps[] = $now;
+            }
+
+            $this->writeTimestamps($handle, $timestamps);
+
+            return count($timestamps);
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
     }
 
-    public function getViolationCount(string $ip): int
+    /**
+     * Current violation count within the rolling $decayWindow. Read-only —
+     * does not prune the stored list, matching getRateCount()'s behavior.
+     */
+    public function getViolationCount(string $ip, int $decayWindow = 3600): int
     {
-        $data = $this->readJson($this->violationFile($ip));
-        return $data['count'] ?? 0;
+        $file = $this->violationFile($ip);
+        $now  = time();
+        $data = $this->readJson($file);
+
+        // Self-heals a pre-decay-window violation file (an object with
+        // count/first/last keys) into the new format: 'count' is far smaller
+        // than any real timestamp, so it ages out on the next write and only
+        // the genuine 'first'/'last' timestamps are ever counted meanwhile.
+        $timestamps = is_array($data) ? array_values(array_filter($data, 'is_int')) : [];
+
+        return count(array_filter($timestamps, fn($t) => ($now - $t) < $decayWindow));
     }
 
     public function resetViolations(string $ip): void
@@ -134,21 +186,45 @@ class Storage
     // -------------------------------------------------------------------------
 
     /**
-     * Increments request counter for $ip within a sliding window.
-     * Returns the current count within the window.
+     * Increments the request counter for $ip within a sliding window and
+     * returns the count within that window.
+     *
+     * Read and write happen under one exclusive lock. Locking only the write,
+     * as this used to, loses hits whenever two requests from the same IP
+     * overlap — which is exactly when the counter matters.
      */
     public function trackRequest(string $ip, int $windowSeconds): int
     {
-        $file   = $this->rateFile($ip);
-        $now    = time();
-        $data   = $this->readJson($file) ?? [];
+        $handle = @fopen($this->rateFile($ip), 'c+');
 
-        // Remove timestamps outside the window
-        $data = array_filter($data, fn($t) => ($now - $t) < $windowSeconds);
-        $data[] = $now;
+        if ($handle === false) {
+            return 0; // unwritable storage must not break the request
+        }
 
-        $this->writeJson($file, array_values($data));
-        return count($data);
+        try {
+            flock($handle, LOCK_EX);
+
+            $contents = stream_get_contents($handle);
+            $data     = is_string($contents) ? json_decode($contents, true) : null;
+            $now      = time();
+
+            $data = is_array($data)
+                ? array_filter($data, fn($t) => is_int($t) && ($now - $t) < $windowSeconds)
+                : [];
+
+            $data[] = $now;
+            $data   = array_values($data);
+
+            rewind($handle);
+            ftruncate($handle, 0);
+            fwrite($handle, json_encode($data));
+            fflush($handle);
+
+            return count($data);
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
     }
 
     public function getRateCount(string $ip, int $windowSeconds): int
@@ -157,6 +233,88 @@ class Storage
         $now  = time();
         $data = $this->readJson($file) ?? [];
         return count(array_filter($data, fn($t) => ($now - $t) < $windowSeconds));
+    }
+
+    // -------------------------------------------------------------------------
+    // Crawler DNS verification cache
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns a cached crawler-verification verdict, or null when there is no
+     * usable entry — missing, corrupt, or expired.
+     *
+     * A corrupt entry is treated as a miss rather than an error: the cost of
+     * re-running the lookup is far smaller than failing the request.
+     */
+    public function readDnsCache(string $key): ?bool
+    {
+        $file = $this->dnsFile($key);
+        $data = $this->readJson($file);
+
+        if ($data === null
+            || !isset($data['trusted'], $data['expires'])
+            || !is_bool($data['trusted'])
+            || !is_int($data['expires'])
+        ) {
+            return null;
+        }
+
+        if (time() > $data['expires']) {
+            @unlink($file);
+            return null;
+        }
+
+        return $data['trusted'];
+    }
+
+    /**
+     * Stores a verification verdict. A $ttl of 0 or less disables caching for
+     * this entry.
+     *
+     * Write failures are ignored on purpose — a cache that cannot be written
+     * must degrade into extra DNS lookups, never into a broken request.
+     */
+    public function writeDnsCache(string $key, bool $trusted, int $ttl): void
+    {
+        if ($ttl <= 0) {
+            return;
+        }
+
+        @file_put_contents($this->dnsFile($key), json_encode([
+            'trusted'   => $trusted,
+            'cached_at' => time(),
+            'expires'   => time() + $ttl,
+        ]), LOCK_EX);
+    }
+
+    public function deleteDnsCache(string $key): void
+    {
+        @unlink($this->dnsFile($key));
+    }
+
+    /**
+     * Removes expired and unreadable cache entries. Safe to call from cron.
+     */
+    public function cleanupDnsCache(): void
+    {
+        foreach (glob($this->dir(self::DIR_DNS) . '/*.json') ?: [] as $file) {
+            $data = $this->readJson($file);
+
+            if ($data === null
+                || !isset($data['expires'])
+                || !is_int($data['expires'])
+                || time() > $data['expires']
+            ) {
+                @unlink($file);
+            }
+        }
+    }
+
+    public function clearDnsCache(): void
+    {
+        foreach (glob($this->dir(self::DIR_DNS) . '/*.json') ?: [] as $file) {
+            @unlink($file);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -183,15 +341,87 @@ class Storage
         file_put_contents($file, $line, FILE_APPEND | LOCK_EX);
     }
 
-    public function readLogs(int $limit = 100): array
+    public function readLogs(int $limit = 100, int $offset = 0): array
     {
         $file = $this->dir(self::DIR_LOGS) . '/attacks.log';
         if (!file_exists($file)) {
             return [];
         }
 
-        $lines = file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        return array_slice(array_reverse($lines), 0, $limit);
+        return $this->tailLines($file, $limit, $offset);
+    }
+
+    /**
+     * Number of log lines currently on disk (attacks.log only — rotated
+     * .bak files are history, not part of the "current log" count).
+     * A raw byte scan, not a per-line parse — cheap even near max_file_size.
+     */
+    public function countLogLines(): int
+    {
+        $file = $this->dir(self::DIR_LOGS) . '/attacks.log';
+        if (!file_exists($file)) {
+            return 0;
+        }
+
+        $content = file_get_contents($file);
+        if ($content === false || $content === '') {
+            return 0;
+        }
+
+        return substr_count($content, "\n");
+    }
+
+    /**
+     * Reads the last $limit lines (newest first) starting $offset lines
+     * back from the end, without loading the whole file. Reads backward in
+     * chunks — the same approach as `tail -n` — so cost scales with how far
+     * back the request reaches, not with total file size.
+     */
+    private function tailLines(string $file, int $limit, int $offset): array
+    {
+        if ($limit <= 0) {
+            return [];
+        }
+
+        $needed    = $offset + $limit;
+        $chunkSize = 65536;
+        $handle    = fopen($file, 'rb');
+        if ($handle === false) {
+            return [];
+        }
+
+        fseek($handle, 0, SEEK_END);
+        $pos          = ftell($handle);
+        $chunks       = [];
+        $newlineCount = 0;
+
+        // Chunks are collected (newest-read-first, i.e. file-order-last)
+        // and joined once at the end with implode(), not repeatedly
+        // prepended with string concatenation in the loop — PHP strings
+        // are copy-on-write, so "$chunk . $buffer" copies the whole
+        // (growing) buffer on every iteration, which is O(n^2) over a deep
+        // read just like rescanning the buffer for newlines would be.
+        while ($pos > 0 && $newlineCount <= $needed) {
+            $read = min($chunkSize, $pos);
+            $pos -= $read;
+            fseek($handle, $pos);
+            $chunk          = fread($handle, $read);
+            $newlineCount  += substr_count($chunk, "\n");
+            $chunks[]       = $chunk;
+        }
+
+        fclose($handle);
+
+        $buffer = implode('', array_reverse($chunks));
+        $lines  = array_values(array_filter(
+            explode("\n", rtrim($buffer, "\n")),
+            static fn (string $line): bool => $line !== ''
+        ));
+        if ($lines === []) {
+            return [];
+        }
+
+        return array_slice(array_reverse($lines), $offset, $limit);
     }
 
     public function cleanupLogs(int $keepDays = 30): void
@@ -204,6 +434,27 @@ class Storage
                 @unlink($file);
             }
         }
+    }
+
+    /**
+     * Lazily gates automatic log cleanup to at most once per
+     * self::LOG_CLEANUP_INTERVAL, driven by real log-write traffic instead
+     * of a system cron. The marker is touched immediately (before the
+     * caller runs cleanup) so a burst of concurrent requests doesn't all
+     * see "due" at once — cleanup itself is idempotent, so the rare race
+     * where two requests both run it is harmless.
+     */
+    public function dueForLogCleanup(): bool
+    {
+        $marker = $this->dir(self::DIR_LOGS) . '/.cleanup_at';
+        $last   = @filemtime($marker);
+
+        if ($last !== false && (time() - $last) < self::LOG_CLEANUP_INTERVAL) {
+            return false;
+        }
+
+        @touch($marker);
+        return true;
     }
 
     // -------------------------------------------------------------------------
@@ -242,6 +493,16 @@ class Storage
     private function rateFile(string $ip): string
     {
         return $this->dir(self::DIR_RATE) . '/' . $this->safeFilename($ip) . '.json';
+    }
+
+    /**
+     * Cache keys are hashed rather than sanitized, so the filename is always
+     * plain hex: no traversal, and no leading dot that would hide the entry
+     * from the glob() used by cleanup.
+     */
+    private function dnsFile(string $key): string
+    {
+        return $this->dir(self::DIR_DNS) . '/' . sha1($key) . '.json';
     }
 
     private function safeFilename(string $ip): string
@@ -284,9 +545,47 @@ class Storage
         file_put_contents($file, json_encode($data), LOCK_EX);
     }
 
+    /**
+     * Reads the timestamp list behind an already-locked handle and drops
+     * entries older than $decayWindow.
+     *
+     * Also the self-heal path for a pre-decay-window violation file: an
+     * object with count/first/last keys decodes to an array where 'count' is
+     * far smaller than any real timestamp, so it is filtered out here and
+     * only the genuine 'first'/'last' timestamps survive.
+     *
+     * @return array<int,int>
+     */
+    private function decayedTimestamps($handle, int $decayWindow): array
+    {
+        $contents = stream_get_contents($handle);
+        $data     = is_string($contents) ? json_decode($contents, true) : null;
+        $now      = time();
+
+        if (!is_array($data)) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            $data,
+            fn($t): bool => is_int($t) && ($now - $t) < $decayWindow
+        ));
+    }
+
+    /**
+     * @param array<int,int> $timestamps
+     */
+    private function writeTimestamps($handle, array $timestamps): void
+    {
+        rewind($handle);
+        ftruncate($handle, 0);
+        fwrite($handle, json_encode($timestamps));
+        fflush($handle);
+    }
+
     private function ensureDirectories(): void
     {
-        foreach ([self::DIR_BANS, self::DIR_RATE, self::DIR_VIOLATIONS, self::DIR_LOGS] as $sub) {
+        foreach ([self::DIR_BANS, self::DIR_RATE, self::DIR_VIOLATIONS, self::DIR_LOGS, self::DIR_DNS] as $sub) {
             $path = $this->dir($sub);
             if (!is_dir($path)) {
                 mkdir($path, 0755, true);

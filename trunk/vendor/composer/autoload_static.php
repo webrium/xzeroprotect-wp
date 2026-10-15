@@ -33,6 +33,7 @@ class ComposerStaticInit15bb089d0b79c1bd036969c890ea9796
         'Webrium\\XZeroProtect\\Request' => __DIR__ . '/..' . '/webrium/xzeroprotect/src/Request.php',
         'Webrium\\XZeroProtect\\RuleEngine' => __DIR__ . '/..' . '/webrium/xzeroprotect/src/RuleEngine.php',
         'Webrium\\XZeroProtect\\Storage' => __DIR__ . '/..' . '/webrium/xzeroprotect/src/Storage.php',
+        'Webrium\\XZeroProtect\\VisitFilter' => __DIR__ . '/..' . '/webrium/xzeroprotect/src/VisitFilter.php',
         'Webrium\\XZeroProtect\\VisitInfo' => __DIR__ . '/..' . '/webrium/xzeroprotect/src/VisitInfo.php',
         'Webrium\\XZeroProtect\\XZeroProtect' => __DIR__ . '/..' . '/webrium/xzeroprotect/src/XZeroProtect.php',
     );
