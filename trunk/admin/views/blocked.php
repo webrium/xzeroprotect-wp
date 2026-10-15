@@ -8,7 +8,7 @@ $xzp_type_labels = [
     'custom_rule'  => __('Custom Rule', 'xzeroprotect'),
 ];
 ?>
-<div class="xzp-wrap">
+<div class="xzp-wrap xzp-wrap--wide">
 
     <div class="xzp-header">
         <div class="xzp-header__left">
@@ -46,7 +46,7 @@ $xzp_type_labels = [
                             </span>
                         </td>
                         <td class="xzp-td-reason"><?php echo esc_html($xzp_b['reason']); ?></td>
-                        <td class="xzp-td-ua" title="<?php echo esc_attr($xzp_b['user_agent']); ?>"><?php echo esc_html(substr($xzp_b['user_agent'], 0, 60)); ?></td>
+                        <td class="xzp-td-ua" title="<?php echo esc_attr($xzp_b['user_agent']); ?>"><?php echo esc_html($xzp_b['user_agent']); ?></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>

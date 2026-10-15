@@ -1,5 +1,5 @@
 <?php defined('ABSPATH') || exit; ?>
-<div class="xzp-wrap">
+<div class="xzp-wrap xzp-wrap--wide">
 
     <div class="xzp-header">
         <div class="xzp-header__left">
