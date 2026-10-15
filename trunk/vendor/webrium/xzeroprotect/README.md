@@ -89,7 +89,8 @@ $firewall = XZeroProtect::init([
     // --- Automatic banning ---
     'auto_ban' => [
         'enabled'              => true,
-        'violations_threshold' => 10,     // violations before a ban is issued
+        'violations_threshold' => 10,     // violations within violation_window before a ban
+        'violation_window'     => 3600,   // rolling window (seconds) violations are counted in
         'ban_duration'         => 86400,  // ban length in seconds (24 h)
         'permanent_after_bans' => 3,      // escalate to permanent after N bans
     ],
@@ -134,6 +135,7 @@ $firewall = XZeroProtect::init([
         'enabled'       => true,
         'max_file_size' => 10,   // MB — auto-rotated when exceeded
         'keep_days'     => 30,
+        'auto_cleanup'  => true, // sweep expired .bak files on real traffic, no cron needed
     ],
 
 ]);
@@ -145,9 +147,31 @@ $firewall->run();
 
 ## Detection Modules
 
+> ### Accuracy comes first
+>
+> A false positive costs more than a false negative. A missed probe gets a `404` from your router; a wrongly blocked visitor gets a `403`, and with `auto_ban` on, loses access for a day — on a carrier NAT, so do thousands of other people.
+>
+> Two rules follow from that, and they are enforced by `tests/DetectionAccuracyTest.php`:
+>
+> - **Paths are matched per segment, and the query string is never examined.** `wp-admin` matches `/wp-admin/setup-config.php`, not `/posts/how-i-left-wp-admin-behind`. `/search?q=wordpress` is a site search, not an attack.
+> - **Payload patterns must require syntax that prose does not contain.** These run against comment boxes and support tickets. `SELECT … FROM` is also "Select a plan from the list", `#` is also a markdown heading and the C# language, and a link ending in `.html` is a link.
+>
+> Ordinary English words are not safe pattern entries even as whole segments, so `administrator`, `wordpress`, `drupal` and bare `changelog` are **not** in the defaults. Add them if they cannot be pages on your site.
+
 ### Path Detection
 
 Blocks requests targeting sensitive or non-existent paths. Because a modern routed PHP app has no `.php` files in the URL, you can add that pattern to immediately reject the flood of `index.php?id=` scanner probes.
+
+Patterns are matched against path segments:
+
+| Pattern form | Matches | Does not match |
+|---|---|---|
+| `wp-admin` | `/wp-admin/`, `/wp-admin/x.php`, `/blog/wp-admin` | `/posts/leaving-wp-admin` |
+| `phpinfo` | `/phpinfo.php` | `/posts/reading-phpinfo-output` |
+| `.env` | `/.env`, `/config/.env`, `/.env.bak` | `/posts/dotenv-guide` |
+| `../`, `%2e%2e` | anywhere in the URI — always hostile | — |
+
+Percent-encoding is decoded until stable first, so `/wp-admin%2Fsetup.php` and `..%252f..%252f` are matched in their decoded form.
 
 ```php
 // Add individual patterns
@@ -184,7 +208,13 @@ $firewall->patterns->removePath('xmlrpc');
 
 ### User-Agent Detection
 
-Identifies and blocks known scanner, brute-force, and exploit tool signatures. Empty User-Agent strings are treated as suspicious by default.
+Identifies and blocks known scanner, brute-force, and exploit tool signatures.
+
+An **empty User-Agent is allowed by default**. Feed readers, uptime probes, and some proxies send none; an absent UA is unusual, not hostile, and counting it as a violation fed `auto_ban` with legitimate clients. Enable it only if every client of your app is known to send one:
+
+```php
+XZeroProtect::init(['empty_user_agent_suspicious' => true]);
+```
 
 ```php
 $firewall->patterns->addAgent('custom-bad-bot');
@@ -194,7 +224,9 @@ $firewall->patterns->removeAgent('curl'); // allow curl if your API clients use 
 <details>
 <summary>View default blocked agents</summary>
 
-`sqlmap` · `nikto` · `nessus` · `acunetix` · `netsparker` · `masscan` · `nmap` · `zgrab` · `dirbuster` · `gobuster` · `feroxbuster` · `wfuzz` · `ffuf` · `hydra` · `metasploit` · `semrushbot` · `ahrefsbot` · `libwww-perl` · and more
+`sqlmap` · `nikto` · `nessus` · `acunetix` · `netsparker` · `masscan` · `nmap` · `zgrab` · `dirbuster` · `gobuster` · `feroxbuster` · `wfuzz` · `ffuf` · `hydra` · `metasploit` · `libwww-perl` · and more
+
+> **Note:** Semrush and Ahrefs are legitimate SEO audit tools, not attack tools, so they are not hard-blocked by default. They are not on the trusted-crawler list either, so their traffic still passes through normal rate limiting. Block them yourself if you don't want that traffic: `$firewall->patterns->addAgent('semrushbot');`
 
 > **Note:** `curl`, `wget`, `python-requests`, and `go-http-client` are **not** blocked by default because they are also used by legitimate API clients. Add them explicitly if needed:
 > ```php
@@ -210,7 +242,9 @@ $firewall->patterns->removeAgent('curl'); // allow curl if your API clients use 
 
 ### Payload Detection
 
-Scans GET parameters, POST body, raw input, and cookies for attack signatures using compiled regular expressions.
+Scans GET parameters, POST body, raw input, and cookies for attack signatures using compiled regular expressions. Input is percent-decoded until stable before matching, so double-encoded payloads are seen in their decoded form.
+
+**Known limitation:** HTML-entity obfuscation inside an attribute (`<body background="javascript&colon;">`) is not detected. Decoding entities before matching would flag any prose that merely quotes HTML, which costs more than this bypass does — output escaping, not the firewall, is the defence against stored XSS.
 
 ```php
 // Add a custom pattern
@@ -258,6 +292,10 @@ $firewall = XZeroProtect::init([
 ]);
 ```
 
+Every request past the limit is still blocked — that part is unconditional. But a real page load can fire far more requests than the limit in one burst: a dashboard's async widgets, a flaky connection retrying, a few open tabs. A single such burst is not an attack, so it is recorded as **at most one** `auto_ban` violation per rate-limit window, no matter how many individual requests overflowed it. A client that keeps exceeding the limit across many separate windows — the thing `auto_ban` exists to catch — still racks up one violation per window and is banned once `violations_threshold` is reached.
+
+Violations also decay: only those within the rolling `violation_window` (default 1h) count toward the threshold, so an old, one-off blip does not sit on a client's record forever.
+
 ---
 
 ## Crawler Detection
@@ -274,6 +312,38 @@ For crawlers like Googlebot and Bingbot, identity is confirmed via **double-DNS 
 This is the verification method recommended by Google and Bing in their official documentation. Anyone can fake a User-Agent — DNS cannot be faked.
 
 Social crawlers (Twitterbot, LinkedInBot, Slackbot, etc.) are trusted by User-Agent only, as they do not publish verifiable IP ranges or rDNS suffixes.
+
+AI/LLM crawlers (GPTBot, ClaudeBot, PerplexityBot, CCBot, Amazonbot, anthropic-ai) are trusted the same way, by User-Agent only, since none of those vendors document a reverse-DNS suffix. Google-Extended and Applebot-Extended run on Google's and Apple's existing crawler infrastructure respectively, so they get the same double-DNS verification as Googlebot and Applebot.
+
+### Verification caching
+
+Double-DNS verification costs two blocking network round-trips — measured at **~770 ms** for a real Googlebot hit, during which a PHP worker does nothing but wait. Under a heavy crawl that adds up to hours of blocked workers, and a flood of spoofed `Googlebot` User-Agents becomes a cheap way to pin every worker you have.
+
+Verdicts are therefore cached on disk, keyed by IP + expected rDNS suffix:
+
+```
+request 1:  770.74 ms   ← resolved
+request 2:    0.06 ms   ← cached
+request 3:    0.01 ms
+```
+
+Failed verifications get the shorter `negative_ttl`, so a transient resolver outage cannot lock a legitimate crawler out for a full day, while repeated spoofed User-Agents are still absorbed.
+
+```php
+$firewall = XZeroProtect::init([
+    'crawler_cache' => [
+        'enabled'      => true,
+        'ttl'          => 86400,   // verified crawler (24h)
+        'negative_ttl' => 3600,    // failed verification (1h)
+    ],
+]);
+
+$firewall->crawlers->clearCache();        // after editing the crawler list
+$firewall->crawlers->cleanupCache();      // drop expired entries — safe for cron
+$firewall->crawlers->isCachePersistent(); // bool
+```
+
+A cache that cannot be written degrades into extra DNS lookups, never into a failed request.
 
 ```php
 // Add a custom trusted crawler
@@ -303,6 +373,8 @@ $firewall->disableCheck('crawler_check');
 | Yandex | `yandexbot` | ✅ `.yandex.com` |
 | Baidu | `baiduspider` | ✅ `.baidu.com` |
 | Applebot | `applebot` | ✅ `.applebot.apple.com` |
+| Applebot-Extended | `applebot-extended` | ✅ `.applebot.apple.com` |
+| Google-Extended | `google-extended` | ✅ `.google.com` |
 | Facebook | `facebookexternalhit` | ✅ `.facebook.com` |
 | Twitterbot | `twitterbot` | — |
 | LinkedInBot | `linkedinbot` | — |
@@ -310,6 +382,13 @@ $firewall->disableCheck('crawler_check');
 | Telegram | `telegrambot` | — |
 | Slackbot | `slackbot` | — |
 | Discordbot | `discordbot` | — |
+| GPTBot (OpenAI) | `gptbot` | — |
+| ChatGPT-User (OpenAI) | `chatgpt-user` | — |
+| ClaudeBot (Anthropic) | `claudebot` | — |
+| anthropic-ai | `anthropic-ai` | — |
+| PerplexityBot | `perplexitybot` | — |
+| CCBot (Common Crawl) | `ccbot` | — |
+| Amazonbot | `amazonbot` | — |
 | Uptimerobot | `uptimerobot` | — |
 | Pingdom | `pingdom` | — |
 
@@ -420,9 +499,28 @@ Generated `.htaccess` block:
 // Read the most recent attack entries (newest first)
 $logs = $firewall->logger->recent(limit: 100);
 
-// Clean up rotated backup log files older than retention period
+// Page further back without loading the whole file
+$logs = $firewall->logger->recent(limit: 100, offset: 100);
+
+// Total lines currently in the active log — for building pagination
+// without reading (or parsing) every line
+$total = $firewall->logger->total();
+
+// Force a cleanup of rotated backups older than keep_days right now
 $firewall->logger->cleanup();
 ```
+
+`recent()` reads backward from the end of the log file in chunks (like
+`tail -n`), so cost scales with how far back a page reaches, not with total
+file size — reading the newest 100 lines out of a 10MB log doesn't load the
+10MB.
+
+Rotated `.bak` backups (see `max_file_size` above) are swept once they're
+older than `keep_days`. This runs on its own — no system cron needed:
+`log.auto_cleanup` (default `true`) checks on real log-write traffic,
+gated to at most once a day, so it adds no meaningful cost to the
+(already rare) attack-logging path. Set it to `false` only if you already
+run your own cleanup (cron, logrotate, ...).
 
 ### Accessing the firewall from outside bootstrap
 
@@ -593,6 +691,116 @@ $firewall->isTrackingEnabled(); // bool
 
 ---
 
+## Visit Filtering
+
+Passing the firewall makes a request *legitimate* — it does not make it a *page view*. A missing font still reaches PHP (your rewrite rules send anything not on disk to `index.php`), a favicon probe is a sub-resource, and a form `POST` is not a new visit. Recorded as-is, all three inflate your statistics.
+
+`$firewall->visits` decides what counts. **It never blocks anything** — it only guards the tracking callback, so a missing asset still gets a normal `404` instead of a `403`.
+
+Enabled by default, filtering `GET` requests only and skipping known asset extensions and sub-resource paths.
+
+```php
+$firewall = XZeroProtect::init([
+    'tracking' => [
+        'filter'             => true,        // false = record everything, as before
+        'when'               => 'immediate', // or 'shutdown' — see below
+        'only_status'        => [200],       // 'shutdown' only; [] = any response
+        'methods'            => ['GET'],     // [] accepts any method
+        'use_sec_fetch_dest' => true,
+        'track_dest'         => ['document'],
+        'ignore_ajax'        => true,
+        'ignore_prefetch'    => true,
+        'ignore_extensions'  => [],          // added to the defaults
+        'ignore_paths'       => [],          // added to the defaults
+    ],
+]);
+```
+
+### What gets filtered
+
+| Signal | Effect |
+|--------|--------|
+| `Sec-Fetch-Dest` | The browser states what it wants the response for. `document` is a page; `font`, `image`, `style`, `script`, `empty`, `manifest`, … are not. Catches sub-resources served from clean routes, where there is no extension to match on. |
+| `X-Requested-With` | jQuery-style XHR is not a page view. |
+| `Sec-Purpose` / `Purpose` / `X-Moz` / `X-Purpose` | Prefetched and prerendered pages nobody has looked at yet. |
+| HTTP method | Only `GET` counts by default; a form `POST` is not a new visit. |
+| Path & extension | Fallback for clients that send no `Sec-Fetch-Dest`. |
+
+`Sec-Fetch-Dest` can only **reject** a request, never wave one through. Typing `/robots.txt` in the address bar is a `document` navigation, but an explicit ignore rule still wins — the header removes false visits, it does not override your configuration.
+
+```php
+// Extend at runtime — every method is chainable
+$firewall->visits->addIgnoredExtension('woff3');   // '.woff3' and 'woff3' both work
+$firewall->visits->addIgnoredPath('/api/');        // matched as a path prefix
+$firewall->visits->allowMethod('POST');
+$firewall->visits->addTrackedDest('iframe');       // count embedded navigations too
+$firewall->visits->ignoreAjax(false);
+$firewall->visits->ignorePrefetch(false);
+$firewall->visits->useSecFetchDest(false);
+
+// Drop a default you want counted
+$firewall->visits->removeIgnoredExtension('.svg');
+$firewall->visits->removeIgnoredPath('/robots.txt');
+
+// Your own logic — return false to discard the visit
+$firewall->visits->addFilter('no-preview', fn($request) => !str_starts_with($request->path(), '/preview'));
+$firewall->visits->removeFilter('no-preview');
+
+// Inspect / debug
+$firewall->visits->shouldTrack($request);  // bool
+$firewall->visits->lastReason();           // 'extension:.woff2' | 'path:/favicon.ico' | 'method:POST' | null
+```
+
+A filter that throws is skipped rather than counted as a rejection, so a bug in your closure can never silently drop traffic from your statistics.
+
+### Not counting 404s, redirects, and errors
+
+The firewall runs before your router, so at that moment nobody knows whether the URL resolves. A visitor following a broken link to `/blog/hlelo-wrold` gets your 404 page — and, by default, a recorded visit.
+
+Set `'when' => 'shutdown'` and the callback fires once the response is complete, when the status code is known:
+
+```php
+XZeroProtect::init([
+    'tracking' => [
+        'when'        => 'shutdown',
+        'only_status' => [200],   // [] to record regardless of the response
+    ],
+]);
+```
+
+No change to your application code — the callback is simply invoked later, from a shutdown handler. The recorded `timestamp` is still the moment the visitor arrived, not the moment the response finished. Requests the filter already rejected are never deferred at all.
+
+`only_status` applies to `shutdown` mode only; in `immediate` mode nothing has been routed yet, so there is no status to check.
+
+<details>
+<summary>View default tracking-ignore rules</summary>
+
+| Category | Entries |
+|----------|---------|
+| Stylesheets & scripts | `.css` `.js` `.mjs` `.map` |
+| Images | `.jpg` `.jpeg` `.png` `.gif` `.webp` `.avif` `.svg` `.ico` `.bmp` |
+| Fonts | `.woff` `.woff2` `.ttf` `.otf` `.eot` |
+| Media | `.mp3` `.m4a` `.wav` `.ogg` `.mp4` `.webm` |
+| Paths | `/favicon.ico` `/apple-touch-icon` `/robots.txt` `/sitemap` `/ads.txt` `/browserconfig.xml` `/service-worker.js` `/sw.js` `/manifest.json` `/site.webmanifest` `/.well-known/` |
+
+> **Note:** `.json`, `.html`, `.xml`, `.txt`, and `.pdf` are **not** in the extension list, because applications legitimately route them. The specific sub-resources among them are listed as paths instead. Edit these defaults in `rules/ignore_tracking.php`.
+
+</details>
+
+### Also handle it in your web server
+
+The filter keeps bad data out of your statistics, but a missing asset still boots PHP. For Apache, answer it before PHP starts — the two work together, and the rewrite is the cheaper half:
+
+```apache
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule \.(?:css|js|map|jpe?g|png|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot|mp3|mp4|webm)$ - [NC,R=404,L]
+```
+
+Keep `.php`, `.env`, and `.asp` out of that list — those probes should reach the firewall so auto-ban can act on them.
+
+---
+
 ## Architecture
 
 ```
@@ -606,9 +814,10 @@ xzeroprotect/
 │   ├── RateLimiter.php       Sliding-window rate limiter
 │   ├── RuleEngine.php        Custom rule registration & execution
 │   ├── ApacheBlocker.php     .htaccess read/write
-│   ├── CrawlerVerifier.php   Trusted crawler detection with double-DNS
+│   ├── CrawlerVerifier.php   Trusted crawler detection with cached double-DNS
 │   ├── Logger.php            Attack logging with rotation
 │   ├── VisitInfo.php         Verified visit data object (tracking)
+│   ├── VisitFilter.php       Decides which requests count as a page visit
 │   └── DeviceInfo.php        Browser, OS, and device type parser
 ├── config/
 │   └── config.php            Default configuration
@@ -616,9 +825,13 @@ xzeroprotect/
 │   ├── paths.php             Default blocked path patterns
 │   ├── agents.php            Default blocked User-Agent signatures
 │   ├── payloads.php          Default attack payload patterns (PCRE)
-│   └── crawlers.php          Trusted crawler definitions (UA + rDNS config)
+│   ├── crawlers.php          Trusted crawler definitions (UA + rDNS config)
+│   └── ignore_tracking.php   Requests never counted as a page visit
 └── tests/
-    └── XZeroProtectTest.php  PHPUnit test suite
+    ├── XZeroProtectTest.php     PHPUnit test suite
+    ├── VisitFilterTest.php      Visit-filtering test suite
+    ├── CrawlerCacheTest.php     Crawler DNS-cache test suite
+    └── DeferredTrackingTest.php Response-status tracking test suite
 ```
 
 ---

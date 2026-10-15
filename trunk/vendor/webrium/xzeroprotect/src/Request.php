@@ -172,32 +172,164 @@ class Request
     }
 
     /**
-     * Returns all user-supplied input as a flat string for payload scanning.
+     * Returns user-supplied input as a flat string for payload scanning.
+     *
+     * @param array<int,string> $exemptFields Field names to exclude from scanning (case-insensitive).
+     * @param array<int,string> $sources      Sources to include: 'get', 'post', 'cookies', 'raw'.
      */
-    public function rawInput(): string
+    public function rawInput(array $exemptFields = [], array $sources = ['get', 'post', 'cookies', 'raw']): string
     {
         $parts = [];
+        $exemptMap = array_fill_keys(array_map('strtolower', $exemptFields), true);
 
-        foreach ([$this->get, $this->post, $this->cookies] as $bag) {
-            foreach ($bag as $value) {
-                $parts[] = is_array($value) ? implode(' ', $value) : (string) $value;
-            }
+        $bags = [];
+        if (in_array('get', $sources, true)) {
+            $bags[] = $this->get;
+        }
+        if (in_array('post', $sources, true)) {
+            $bags[] = $this->post;
+        }
+        if (in_array('cookies', $sources, true)) {
+            $bags[] = $this->cookies;
+        }
+
+        foreach ($bags as $bag) {
+            $this->extractValues($bag, $exemptMap, $parts);
         }
 
         // Also include raw POST body (for JSON APIs, etc.)
-        $raw = file_get_contents('php://input');
-        if ($raw !== false && $raw !== '') {
-            $parts[] = $raw;
+        if (in_array('raw', $sources, true)) {
+            $raw = file_get_contents('php://input');
+            if ($raw !== false && $raw !== '') {
+                if (!empty($exemptMap) && str_starts_with(trim($raw), '{')) {
+                    $decoded = json_decode($raw, true);
+                    if (is_array($decoded)) {
+                        $this->extractValues($decoded, $exemptMap, $parts);
+                    } else {
+                        $parts[] = $raw;
+                    }
+                } else {
+                    $parts[] = $raw;
+                }
+            }
         }
 
         return implode(' ', $parts);
     }
 
     /**
+     * Recursively extracts values from an input array, skipping any exempt keys.
+     *
+     * @param array             $bag       Input dictionary / array.
+     * @param array<string,bool> $exemptMap Lowercase lookup table of exempt keys.
+     * @param array<int,string> &$parts    Accumulated value parts.
+     */
+    private function extractValues(array $bag, array $exemptMap, array &$parts): void
+    {
+        foreach ($bag as $key => $value) {
+            if (is_string($key) && isset($exemptMap[strtolower($key)])) {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $this->extractValues($value, $exemptMap, $parts);
+            } else {
+                $parts[] = (string) $value;
+            }
+        }
+    }
+
+    /**
      * Returns the path portion of the URI (without query string).
+     *
+     * parse_url() returns false — not null — on a malformed URI such as "//"
+     * or "http://:80", so the result is type-checked rather than null-coalesced.
      */
     public function path(): string
     {
-        return parse_url($this->uri, PHP_URL_PATH) ?? $this->uri;
+        $path = parse_url($this->uri, PHP_URL_PATH);
+
+        return is_string($path) ? $path : $this->uri;
+    }
+
+    /**
+     * Returns the lowercase file extension of the last path segment, without
+     * the leading dot, or '' when there is none.
+     *
+     * Dotfiles ('/.env') and trailing dots ('/foo.') count as no extension.
+     * Byte-safe for UTF-8 paths because '/' and '.' are single-byte ASCII.
+     */
+    public function extension(): string
+    {
+        $path     = $this->path();
+        $slash    = strrpos($path, '/');
+        $basename = $slash === false ? $path : substr($path, $slash + 1);
+        $dot      = strrpos($basename, '.');
+
+        if ($dot === false || $dot === 0 || $dot === strlen($basename) - 1) {
+            return '';
+        }
+
+        return strtolower(substr($basename, $dot + 1));
+    }
+
+    /**
+     * Reads a request header by its HTTP name, e.g. header('Sec-Fetch-Dest').
+     * Returns '' when the header is absent.
+     */
+    public function header(string $name): string
+    {
+        $key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
+
+        return isset($_SERVER[$key]) ? (string) $_SERVER[$key] : '';
+    }
+
+    /**
+     * What the browser intends to do with the response: 'document' for a page
+     * navigation, 'font' / 'image' / 'style' / 'script' for a sub-resource,
+     * 'empty' for fetch() and XHR.
+     *
+     * Returns '' on clients that do not send the header, which is the only
+     * reason the extension and path lists still matter.
+     */
+    public function secFetchDest(): string
+    {
+        return strtolower(trim($this->header('Sec-Fetch-Dest')));
+    }
+
+    /**
+     * True for jQuery-style XHR. Native fetch() does not set this header —
+     * it is identified by a 'Sec-Fetch-Dest: empty' instead.
+     */
+    public function isAjax(): bool
+    {
+        return strtolower(trim($this->header('X-Requested-With'))) === 'xmlhttprequest';
+    }
+
+    /**
+     * True when the browser is speculatively loading the page in the
+     * background. Nobody has seen it yet, so it is not a visit.
+     *
+     * Chrome sends Sec-Purpose (formerly Purpose), Firefox X-Moz, and Safari
+     * X-Purpose for link previews.
+     */
+    public function isPrefetch(): bool
+    {
+        foreach (['Sec-Purpose', 'Purpose', 'X-Purpose', 'X-Moz'] as $name) {
+            $value = strtolower($this->header($name));
+
+            if ($value === '') {
+                continue;
+            }
+
+            // Chrome sends compound values such as 'prefetch;prerender'.
+            foreach (['prefetch', 'prerender', 'preview'] as $token) {
+                if (str_contains($value, $token)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }
